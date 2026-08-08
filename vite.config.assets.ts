@@ -30,7 +30,11 @@ export default defineConfig({
     publicDir: false,
     build: {
         outDir: 'public',
-        emptyOutDir: true,
+        // NOT emptyOutDir — the package's public/ is shared (it may hold
+        // .gitkeep or future hand-placed files). The two stable filenames
+        // (refilament.js / refilament.css) overwrite cleanly on each build;
+        // only stale extra assets would linger, and there are none today.
+        emptyOutDir: false,
         cssCodeSplit: false,
         sourcemap: false,
         rollupOptions: {

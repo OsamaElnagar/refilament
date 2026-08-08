@@ -179,6 +179,15 @@ installable, with a prebuilt bundle, generator commands and a documented contrac
 work before a stable v1 is consumer hardening — see `docs/ROADMAP.md` Phase 5 (plugin contract, CI
 matrix, `vendor:publish` consumer smoke test) — plus the deferred items listed in the roadmap.
 
+**Known beta limitations (deliberate, tracked in the roadmap):**
+
+- **Package routes are not in the `web` middleware group.** `routes/refilament.php` registers at the
+  root, so refilament routes have no session, no CSRF enforcement, and no Inertia version header —
+  the panel works, but in-app Inertia navigation falls back to full page loads, the notifications
+  bell needs a session to resolve the user, and `csrf_token()` renders an empty meta tag. Wrapping
+  the shell routes in `web` is the stable-v1 fix (it requires reworking the CSRF-free POST test
+  suite, so it is deferred rather than rushed into the beta).
+
 ## Contributing
 
 Thank you for considering contributing to Refilament! Please review our [contributing guide](.github/CONTRIBUTING.md) to get started.

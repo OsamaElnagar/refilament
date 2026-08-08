@@ -11,6 +11,11 @@ return new class extends Migration
     /**
      * The standard Laravel database-notifications table — the bell (slice B3)
      * reads the authenticated user's rows through the typed endpoint.
+     *
+     * NOTE: keep in sync with the package migration
+     * (`database/migrations/2026_01_01_000001_create_refilament_notifications_table.php`)
+     * — this workbench copy drives the demo app and the test suite; the
+     * package copy is what ships to consumers via refilament-migrations.
      */
     public function up(): void
     {
