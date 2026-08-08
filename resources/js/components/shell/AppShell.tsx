@@ -8,6 +8,7 @@ import PanelSidebar, { iconFor, type PanelConfig } from '@/components/shell/Pane
 import { ShellSlot } from '@/components/shell/ShellSlots';
 import ThemeToggle from '@/components/theme/ThemeToggle';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
+import { panelUrl } from '@/lib/panel';
 import { cn } from '@/lib/utils';
 
 /**
@@ -123,9 +124,13 @@ function TopNav({ panel, currentUrl }: { panel: PanelConfig; currentUrl: string 
 
 function TopNavLink({ item, currentUrl }: { item: PanelConfig['items'][number]; currentUrl: string }) {
     const Icon = iconFor(item.icon);
+    // The dashboard nav item is active only on the dashboard itself — compare
+    // against the derived panel root so a consumer's ->path('admin') keeps
+    // the check honest.
+    const dashboardUrl = panelUrl('');
     const active =
-        item.url === '/refilament'
-            ? currentUrl === item.url || currentUrl === '/refilament'
+        item.url === dashboardUrl
+            ? currentUrl === item.url || currentUrl === dashboardUrl
             : currentUrl.startsWith(item.url);
 
     return (

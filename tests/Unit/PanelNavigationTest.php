@@ -21,6 +21,7 @@ it('serializes the panel shell contract for the sidebar', function () {
 
     expect($panel->toArray())->toBe([
         'id' => 'refilament',
+        'path' => 'refilament',
         'brandName' => 'Refilament',
         'sidebarCollapsible' => false,
         'topNavigation' => false,

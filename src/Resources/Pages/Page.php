@@ -77,15 +77,21 @@ abstract class Page extends BasePage
             // The URI keeps the {resource} placeholder — the where() gate
             // constrains it to the ids discovered at boot, and the record
             // segment to integers, so the shared route shape is the same for
-            // every resource and page slug.
-            route: static fn (string $routeName): Route => RouteFacade::get(
-                '/refilament/{resource}'.$path,
-                [ResourcePageController::class, 'show'],
-            )
-                ->where('resource', implode('|', array_map('preg_quote', app(Refilament::class)->getResourceTableIds())))
-                ->where('record', '[0-9]+')
-                ->middleware([PanelAuthenticate::class])
-                ->name($routeName),
+            // every resource and page slug. The route mounts under the
+            // panel's URL prefix (a consumer's ->path('admin') moves it), and
+            // carries the panel's middleware ahead of the access gate.
+            route: static function (string $routeName) use ($path): Route {
+                $refilament = app(Refilament::class);
+
+                return RouteFacade::get(
+                    $refilament->panel()->url('/{resource}'.$path),
+                    [ResourcePageController::class, 'show'],
+                )
+                    ->where('resource', implode('|', array_map('preg_quote', $refilament->getResourceTableIds())))
+                    ->where('record', '[0-9]+')
+                    ->middleware([...$refilament->panel()->getMiddleware(), PanelAuthenticate::class])
+                    ->name($routeName);
+            },
         );
     }
 

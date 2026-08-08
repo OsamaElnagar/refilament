@@ -38,6 +38,13 @@ return [
 
     'panel' => [
         'id' => 'refilament',
+        /*
+        | The URL prefix every panel route serves under — '/{path}' — and the
+        | prefix the shell's own URLs (search, notifications, table and
+        | relation endpoints, page links) are built from. A consumer's
+        | RefilamentPanelProvider overrides this with ->path('admin').
+        */
+        'path' => 'refilament',
         'brand_name' => 'Refilament',
         /*
         | A brand logo URL rendered beside the brand name in the shell (or a
@@ -49,12 +56,25 @@ return [
         | (mirrors Filament's topNavigation()).
         */
         'top_navigation' => false,
-        'dashboard_url' => '/refilament',
+        /*
+        | The brand link's target (the dashboard). Null derives from `path`,
+        | so changing the panel's URL prefix moves the brand link with it.
+        */
+        'dashboard_url' => null,
         'colors' => [
             'primary' => '#6366f1',
             'primary_foreground' => '#ffffff',
         ],
         'widgets' => [],
+
+        /*
+        | Middleware applied to every panel route (the shell pages and the
+        | typed endpoints). Empty by default — the panel routes register bare.
+        | Add the framework's `web` group here to opt the panel into sessions
+        | + CSRF, or any of your own middleware. The access gate itself is a
+        | separate opt-in (`auth_middleware` below).
+        */
+        'middleware' => [],
 
         /*
         |--------------------------------------------------------------------------

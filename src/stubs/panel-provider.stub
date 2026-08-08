@@ -1,0 +1,32 @@
+<?php
+
+namespace {{ namespace }};
+
+use Refilament\Refilament\Http\Middleware\Authenticate;
+use Refilament\Refilament\Panel\Panel;
+use Refilament\Refilament\Panel\PanelProvider;
+
+class {{ class }} extends PanelProvider
+{
+    /**
+     * Configure the Refilament panel.
+     *
+     * The panel arrives pre-seeded with the defaults from config/refilament.php
+     * (resources, pages, id, path, brand, colors, middleware and the auth
+     * gate) — chain the overrides you want. Everything below is an example.
+     */
+    public function panel(Panel $panel): Panel
+    {
+        return $panel
+            ->path('{{ path }}')
+            // ->brandName('My App')
+            // ->colors(['primary' => '#e11d48'])
+            // ->middleware(['web'])                       // sessions + CSRF on the panel's routes
+            // ->authMiddleware([Authenticate::class])     // turn the access gate on
+            // ->loginUrl('/login')                        // where unauthenticated visitors go
+            // ->widgets([StatsOverview::class])
+            // ->renderHook('sidebar-footer', 'my-component')
+            // ->databaseNotifications()
+            ;
+    }
+}

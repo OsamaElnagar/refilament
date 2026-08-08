@@ -17,8 +17,11 @@ it('registers a standalone page route and serves its Inertia component', functio
 });
 
 it('applies the panel auth gate to standalone pages', function () {
-    config()->set('refilament.panel.auth_middleware', [PanelAuthenticate::class]);
-    config()->set('refilament.panel.login_url', '/login');
+    // The gate reads the live panel per request — arming it on the resolved
+    // panel instance is the consumer's toggle (config is seeded at boot).
+    app(Refilament::class)->panel()
+        ->authMiddleware([PanelAuthenticate::class])
+        ->loginUrl('/login');
 
     $this->get('/refilament/settings', ['X-Inertia' => 'true'])
         ->assertRedirect('/login');

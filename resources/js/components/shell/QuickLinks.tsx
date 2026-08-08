@@ -1,6 +1,8 @@
 import { Link } from '@inertiajs/react';
 import { LifeBuoy } from 'lucide-react';
 
+import { panelUrl } from '@/lib/panel';
+
 /**
  * Demo shell render hook (slice B1) — registered for the 'sidebar-footer'
  * slot, mirroring Heaven's quick-links partial injected into the shell. The
@@ -13,7 +15,7 @@ export default function QuickLinks(): React.JSX.Element {
             <span className="text-xs text-muted-foreground">Refilament v0</span>
 
             <Link
-                href="/refilament/playground"
+                href={panelUrl('/playground')}
                 className="inline-flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground"
             >
                 <LifeBuoy className="size-3.5" aria-hidden="true" />

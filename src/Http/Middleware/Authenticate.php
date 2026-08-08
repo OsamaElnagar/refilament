@@ -6,21 +6,22 @@ namespace Refilament\Refilament\Http\Middleware;
 
 use Closure;
 use Illuminate\Auth\Middleware\Authenticate as Middleware;
+use Refilament\Refilament\Refilament;
 
 /**
  * The panel's access gate (slice 1.9 "auth gate").
  *
  * Mounted on the panel's shell-rendering routes (the dashboard, every
  * resource page, and the standalone pages). Whether the gate is actually
- * enforced is decided *per request* from the live panel config
- * (refilament.panel.auth_middleware) — never from a cached Panel instance,
- * because the panel may be built (and its singleton cached) during route
- * registration at boot, before a consumer toggles the gate. Reading config
- * here lets a consumer enable or disable the gate at any time without
+ * enforced is decided *per request* from the live panel
+ * (Refilament::panel()->getAuthMiddleware()) — never from a cached Panel
+ * instance or a config copy, because the panel may be built during route
+ * registration at boot, before a consumer toggles the gate. Reading the
+ * panel here lets a consumer enable or disable the gate at any time without
  * re-registering routes:
  *
  * - The gate is **enabled** only while its own middleware class appears in the
- *   panel's `auth_middleware` list. When listed, the request must authenticate
+ *   panel's `authMiddleware()` list. When listed, the request must authenticate
  *   against the panel's auth guard (`->authGuard()`) before any shell page
  *   renders; an unauthenticated visitor is redirected to the panel's
  *   `loginUrl`.
@@ -35,9 +36,11 @@ class Authenticate extends Middleware
 {
     public function handle($request, Closure $next, ...$guards): mixed
     {
-        // Permissive default: without the gate listed in the panel's auth
-        // middleware, the shell pages serve openly (workbench mode).
-        if (! in_array(self::class, config('refilament.panel.auth_middleware', []), true)) {
+        // Permissive default: without the gate listed in the live panel's
+        // auth middleware, the shell pages serve openly (workbench mode). The
+        // panel resolves per request, so a consumer toggling
+        // ->authMiddleware() needs no route re-registration.
+        if (! in_array(self::class, app(Refilament::class)->panel()->getAuthMiddleware(), true)) {
             return $next($request);
         }
 
@@ -56,10 +59,11 @@ class Authenticate extends Middleware
      */
     protected function authenticate($request, array $guards): void
     {
-        $guard = $this->auth->guard((string) config('refilament.panel.auth_guard', 'web'));
+        $panel = app(Refilament::class)->panel();
+        $guard = $this->auth->guard($panel->getAuthGuard());
 
         if ($guard->check()) {
-            $this->auth->shouldUse((string) config('refilament.panel.auth_guard', 'web'));
+            $this->auth->shouldUse($panel->getAuthGuard());
 
             return;
         }
@@ -75,6 +79,6 @@ class Authenticate extends Middleware
      */
     protected function redirectTo($request): ?string
     {
-        return config('refilament.panel.login_url');
+        return app(Refilament::class)->panel()->getLoginUrl();
     }
 }

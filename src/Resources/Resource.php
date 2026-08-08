@@ -277,7 +277,7 @@ abstract class Resource
      */
     public static function getNavigationUrl(): string
     {
-        return '/refilament/'.static::getTableId();
+        return app(Refilament::class)->panel()->url('/'.static::getTableId());
     }
 
     /**

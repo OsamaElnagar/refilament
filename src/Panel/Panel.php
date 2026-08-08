@@ -35,6 +35,16 @@ class Panel
 
     protected string $id = 'refilament';
 
+    /**
+     * The panel's URL prefix — everything the panel serves (the dashboard,
+     * every resource page, the standalone pages and the typed endpoints)
+     * lives under "/{path}". Mirrors Filament's `Panel::path('admin')`: the
+     * first identity decision a consumer makes alongside `id()`. Kept as a
+     * bare segment (no slashes) so route registration and every URL built
+     * here agree on one shape.
+     */
+    protected string $path = 'refilament';
+
     protected string $brandName = 'Refilament';
 
     /**
@@ -106,7 +116,24 @@ class Panel
      */
     protected array $pages = [];
 
-    protected string $dashboardUrl = '/refilament';
+    /**
+     * The brand's target URL (the dashboard). Null derives from the panel's
+     * `path` — the default, so changing the path moves the brand link with
+     * it; an explicit value always wins.
+     */
+    protected ?string $dashboardUrl = null;
+
+    /**
+     * Middleware applied to every panel route (the shell pages and the typed
+     * endpoints) — mirrors Filament's `Panel::middleware()`. Defaults to an
+     * empty list, so the panel routes register bare; a consumer adds the
+     * framework's `web` group here to opt the panel into sessions + CSRF, or
+     * any of their own middleware. This is pure config resolved at route
+     * registration, never serialized across the wire.
+     *
+     * @var array<int, class-string|string>
+     */
+    protected array $middleware = [];
 
     /**
      * Whether the shell renders the database-notifications bell (slice B3),
@@ -162,6 +189,38 @@ class Panel
         $this->id = $id;
 
         return $this;
+    }
+
+    /**
+     * The panel's URL prefix, stored bare ('admin', never '/admin').
+     */
+    public function path(string $path): static
+    {
+        $this->path = trim($path, '/');
+
+        return $this;
+    }
+
+    public function getPath(): string
+    {
+        return $this->path;
+    }
+
+    /**
+     * Build an absolute panel URL for a path relative to the panel's prefix
+     * ('/{resource}/create' → '/refilament/{resource}/create'). Every URL the
+     * panel or its resources hand to the shell goes through here, so a
+     * consumer's `->path('admin')` moves the whole panel.
+     */
+    public function url(string $path = ''): string
+    {
+        $url = '/'.ltrim($this->getPath(), '/');
+
+        if ($path !== '') {
+            $url .= '/'.ltrim($path, '/');
+        }
+
+        return $url;
     }
 
     public function brandName(string $brandName): static
@@ -361,7 +420,7 @@ class Panel
         return array_values(array_unique($this->pages));
     }
 
-    public function dashboardUrl(string $url): static
+    public function dashboardUrl(?string $url): static
     {
         $this->dashboardUrl = $url;
 
@@ -390,6 +449,24 @@ class Panel
         $this->authMiddleware = $middleware;
 
         return $this;
+    }
+
+    /**
+     * @param  array<int, class-string|string>  $middleware
+     */
+    public function middleware(array $middleware): static
+    {
+        $this->middleware = $middleware;
+
+        return $this;
+    }
+
+    /**
+     * @return array<int, class-string|string>
+     */
+    public function getMiddleware(): array
+    {
+        return $this->middleware;
     }
 
     /**
@@ -430,6 +507,14 @@ class Panel
         return $this->id;
     }
 
+    /**
+     * @return array<int, class-string<resource>>
+     */
+    public function getResources(): array
+    {
+        return $this->resources;
+    }
+
     public function getBrandName(): string
     {
         return $this->brandName;
@@ -458,7 +543,7 @@ class Panel
 
     public function getDashboardUrl(): string
     {
-        return $this->dashboardUrl;
+        return $this->dashboardUrl ?? $this->url();
     }
 
     public function getAuthGuard(): string
@@ -542,11 +627,12 @@ class Panel
 
         return [
             'id' => $this->id,
+            'path' => $this->getPath(),
             'brandName' => $this->brandName,
             ...($brandLogo !== null ? ['brandLogo' => $brandLogo] : []),
             'sidebarCollapsible' => $this->sidebarCollapsible,
             'topNavigation' => $this->topNavigation,
-            'dashboardUrl' => $this->dashboardUrl,
+            'dashboardUrl' => $this->getDashboardUrl(),
             ...($this->colors !== [] ? ['colors' => $this->colors] : []),
             ...($this->renderHooks !== [] ? ['renderHooks' => $this->renderHooks] : []),
             ...($this->databaseNotifications ? ['notifications' => ['polling' => $this->notificationsPolling ?? '30s']] : []),
@@ -608,7 +694,7 @@ class Panel
 
                 $items[] = NavigationItem::make($page::getNavigationLabel())
                     ->key($page)
-                    ->url('/refilament/'.$resource::getTableId().$page::getRoutePath())
+                    ->url($this->url('/'.$resource::getTableId().$page::getRoutePath()))
                     ->group($page::getNavigationGroup() ?? $resource::getNavigationGroup())
                     ->sort($page::getNavigationSort())
                     ->icon($page::getNavigationIcon() ?? $resource::getNavigationIcon());
@@ -638,7 +724,7 @@ class Panel
 
             $items[] = NavigationItem::make($page::getNavigationLabel())
                 ->key($page)
-                ->url('/refilament/'.$page::getSlug())
+                ->url($this->url('/'.$page::getSlug()))
                 ->group($page::getNavigationGroup())
                 ->sort($page::getNavigationSort())
                 ->icon($page::getNavigationIcon());

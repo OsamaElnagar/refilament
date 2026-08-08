@@ -6,6 +6,7 @@ namespace Refilament\Refilament;
 
 use Illuminate\Support\ServiceProvider;
 use Inertia\Inertia;
+use Refilament\Refilament\Console\Commands\InstallCommand;
 use Refilament\Refilament\Console\Commands\MakePageCommand;
 use Refilament\Refilament\Console\Commands\MakeResourceCommand;
 use Refilament\Refilament\Console\Commands\RefilamentCommand;
@@ -36,8 +37,6 @@ class RefilamentServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        $this->loadRoutesFrom(__DIR__.'/../routes/refilament.php');
-
         // Discover resources from the configured directory so their tables and
         // forms are served through the typed endpoints automatically
         // (docs/ARCHITECTURE.md, "Resources").
@@ -47,22 +46,18 @@ class RefilamentServiceProvider extends ServiceProvider
             (string) config('refilament.resources.namespace'),
         );
 
-        // Auto-register one page route per page name in every discovered
-        // resource's getPages() map (slice 1.6 — docs/ROADMAP.md "1.6 Page
-        // system"): GET /refilament/{resource}{path} for each page slot,
-        // named refilament.resource.{page} and served by the single
-        // ResourcePageController, which resolves the page class from the
-        // route name's trailing segment and the resource from the URL.
-        // Each route is where()-gated to the ids discovered at boot (never an
-        // unconstrained catch-all, so app-owned routes like
-        // /refilament/playground are not shadowed) and constrains its
-        // {record} segment to [0-9]+. The where() list — not the manager's
-        // id list — is the operative gate deciding which URLs reach these
-        // routes, so any future late-registration support must keep both in
-        // sync. The page classes themselves build the routes
-        // (Resources\Pages\Page::route()), mirroring Filament's
-        // PageRegistration.
-        $refilament->registerPageRoutes();
+        // Register every package route and page route under the panel's URL
+        // prefix. This runs from a `booted()` hook — after every provider has
+        // registered and booted — so a consumer's PanelProvider (which
+        // registers its `panel()` override during provider registration, and
+        // whose provider class sits in bootstrap/providers.php after the
+        // auto-discovered package providers) is already known when the panel
+        // path is resolved. A consumer's `->path('admin')` therefore moves
+        // the routes with it.
+        $this->app->booted(static function () use ($refilament): void {
+            $refilament->registerRoutes();
+            $refilament->registerPageRoutes();
+        });
 
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'refilament');
 
@@ -100,6 +95,7 @@ class RefilamentServiceProvider extends ServiceProvider
         ], ['refilament', 'refilament-migrations']);
 
         $this->commands([
+            InstallCommand::class,
             MakePageCommand::class,
             MakeResourceCommand::class,
             RefilamentCommand::class,

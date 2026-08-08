@@ -1,4 +1,5 @@
 import AppShell from '@/components/shell/AppShell';
+import { panelUrl } from '@/lib/panel';
 import TableRenderer from '@/tables/TableRenderer';
 import type { TablePayload } from '@/tables/types';
 
@@ -31,10 +32,10 @@ export default function ResourceTable(props: TablePayload) {
                         <h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1>
                         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                             An auto-registered page — the package serves{' '}
-                            <code>/refilament/{props.id}</code> for every discovered resource, no
+                            <code>{panelUrl(`/${props.id}`)}</code> for every discovered resource, no
                             app-side route or page component needed. Create happens in a
                             modal (slice 1.1) — the full-page create route remains at{' '}
-                            <code>/refilament/{props.id}/create</code>.
+                            <code>{panelUrl(`/${props.id}/create`)}</code>.
                         </p>
                     </div>
                 </header>

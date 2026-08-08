@@ -1,10 +1,11 @@
 import { useCallback, useRef, useState } from 'react';
 
 import { readCsrfToken } from '@/lib/csrf';
+import { panelUrl } from '@/lib/panel';
 import type { NotificationPayload } from '@/notifications/renderNotification';
 
 function submitUrl(schemaId: string): string {
-    return `/refilament/schema/${encodeURIComponent(schemaId)}/submit`;
+    return panelUrl(`/schema/${encodeURIComponent(schemaId)}/submit`);
 }
 
 export interface SchemaSubmitOptions {

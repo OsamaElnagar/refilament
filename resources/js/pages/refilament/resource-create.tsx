@@ -5,6 +5,7 @@ import AppShell from '@/components/shell/AppShell';
 import SchemaRenderer from '@/schemas/SchemaRenderer';
 import { CONTRACT_VERSION } from '@/schemas/types';
 import type { SchemaDocument } from '@/schemas/types';
+import { panelUrl } from '@/lib/panel';
 
 interface ResourceCreateProps extends SchemaDocument {
     /** The resource's table id — the list route to return to on success. */
@@ -41,7 +42,7 @@ export default function ResourceCreate(props: ResourceCreateProps) {
                     </h1>
                     <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                         An auto-registered create page — the package serves{' '}
-                        <code>/refilament/{props.resource}/create</code> for every discovered
+                        <code>{panelUrl(`/${props.resource}/create`)}</code> for every discovered
                         resource, no app-side route or page component needed.
                     </p>
                 </header>
@@ -54,7 +55,7 @@ export default function ResourceCreate(props: ResourceCreateProps) {
                         schemaId={props.id}
                         submitLabel={`Create ${props.resourceTitle}`}
                         operation="create"
-                        onSuccess={() => router.visit(`/refilament/${props.resource}`)}
+                        onSuccess={() => router.visit(panelUrl(`/${props.resource}`))}
                     />
                 </Card>
 

@@ -17,6 +17,7 @@ import {
     SidebarMenuItem,
     SidebarRail,
 } from '@/components/ui/sidebar';
+import { panelUrl } from '@/lib/panel';
 import { cn } from '@/lib/utils';
 
 export interface PanelConfig {
@@ -27,6 +28,8 @@ export interface PanelConfig {
     sidebarCollapsible: boolean;
     /** Render the navigation in a top bar instead of the sidebar (slice B2). */
     topNavigation?: boolean;
+    /** The panel's URL prefix — every panel URL is built under it. */
+    path?: string;
     dashboardUrl: string;
     colors?: Record<string, string>;
     /**
@@ -87,7 +90,7 @@ export function iconFor(name?: string): LucideIcon {
 export default function PanelSidebar() {
     const { props, url } = usePage();
     const panel = (props as { refilament?: { panel?: PanelConfig } }).refilament?.panel;
-    const dashboardUrl = panel?.dashboardUrl ?? '/refilament';
+    const dashboardUrl = panel?.dashboardUrl ?? panelUrl('');
 
     return (
         <Sidebar>
@@ -246,9 +249,13 @@ function PanelGroup({ group, currentUrl }: { group: PanelNavGroup; currentUrl: s
 
 function PanelItemButton({ item, currentUrl }: { item: PanelNavItem; currentUrl: string }) {
     const Icon = iconFor(item.icon);
+    // The dashboard nav item (whose URL equals the panel root) is active only
+    // on the dashboard itself — the derived panel root, so a consumer's
+    // ->path('admin') keeps the check honest.
+    const dashboardUrl = panelUrl('');
     const active =
-        item.url === '/refilament'
-            ? currentUrl === item.url || currentUrl === '/refilament'
+        item.url === dashboardUrl
+            ? currentUrl === item.url || currentUrl === dashboardUrl
             : currentUrl.startsWith(item.url);
 
     return (

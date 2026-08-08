@@ -2,6 +2,21 @@
 
 ## [Unreleased](https://github.com/osamaelnagar/refilament/compare/v0.1.1-beta.1...1.x)
 
+### Added
+
+- **Filament-style install experience** — `refilament:install` publishes config / assets /
+  migrations, generates a consumer-owned `app/Providers/RefilamentPanelProvider.php` (mirroring
+  Filament's `PanelProvider` + `panel(Panel $panel): Panel` contract) and registers it in
+  `bootstrap/providers.php`.
+- **`Panel::path()`** — the panel's URL prefix. `->path('admin')` moves every panel route and the
+  shell's own URLs (search, notifications, table / relation endpoints, page links) to `/admin`;
+  the dashboard URL derives from the path unless explicitly set.
+- **`Panel::middleware()`** — middleware applied to every panel route (opt into `web` for sessions
+  + CSRF); the auth gate (`->authMiddleware()`) is now read from the live panel per request, so
+  arming it needs no route re-registration.
+- Panel resolution through the consumer's provider: `Refilament::registerPanel()` runs the
+  provider's `panel()` on top of the config-seeded panel; without a provider the config-driven
+  panel is the whole story (workbench / default mode).
 
 ## [v0.1.1-beta.1](https://github.com/osamaelnagar/refilament/compare/v0.1.0...v0.1.1-beta.1) - 2026-08-08
 

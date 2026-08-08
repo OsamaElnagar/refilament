@@ -13,6 +13,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { readCsrfToken } from '@/lib/csrf';
+import { panelUrl } from '@/lib/panel';
 import { cn } from '@/lib/utils';
 
 /**
@@ -104,7 +105,7 @@ export default function NotificationsBell(): React.JSX.Element | null {
 
         const refresh = async (): Promise<void> => {
             try {
-                const response = await fetch('/refilament/notifications');
+                const response = await fetch(panelUrl('/notifications'));
 
                 if (!response.ok || cancelled) {
                     return;
@@ -155,7 +156,7 @@ export default function NotificationsBell(): React.JSX.Element | null {
         setRunning(item.id);
 
         try {
-            const response = await fetch(`/refilament/notifications/${item.id}/read`, {
+            const response = await fetch(panelUrl(`/notifications/${item.id}/read`), {
                 method: 'POST',
                 headers: postHeaders(),
             });
@@ -173,7 +174,7 @@ export default function NotificationsBell(): React.JSX.Element | null {
         setClearing(true);
 
         try {
-            const response = await fetch('/refilament/notifications/read-all', {
+            const response = await fetch(panelUrl('/notifications/read-all'), {
                 method: 'POST',
                 headers: postHeaders(),
             });

@@ -19,6 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { readCsrfToken } from '@/lib/csrf';
+import { panelUrl } from '@/lib/panel';
 import { ICONS } from '@/tables/cell';
 import { renderNotification } from '@/notifications/renderNotification';
 import type { NotificationPayload } from '@/notifications/renderNotification';
@@ -137,7 +138,7 @@ export default function GlobalSearch() {
 
             try {
                 const params = new URLSearchParams({ q: term });
-                const response = await fetch(`/refilament/search?${params.toString()}`, {
+                const response = await fetch(`${panelUrl('/search')}?${params.toString()}`, {
                     headers: { Accept: 'application/json' },
                     signal: controller.signal,
                 });
@@ -208,7 +209,7 @@ export default function GlobalSearch() {
                 headers['X-CSRF-TOKEN'] = csrfToken;
             }
 
-            const response = await fetch(`/refilament/search/${hit.resource}/action/${action.name}`, {
+            const response = await fetch(panelUrl(`/search/${hit.resource}/action/${action.name}`), {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ record: hit.record }),

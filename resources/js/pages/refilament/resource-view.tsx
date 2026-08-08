@@ -9,6 +9,7 @@ import type { FieldNode } from '@/schemas/types';
 import type { TablePayload } from '@/tables/types';
 import TableRenderer, { type TableSource } from '@/tables/TableRenderer';
 import type { TableColumn, TableSummaryMap } from '@/tables/types';
+import { panelUrl } from '@/lib/panel';
 
 interface ResourceViewProps {
     /** The resource's table id — the list route to return to. */
@@ -88,7 +89,7 @@ export default function ResourceView(props: ResourceViewProps) {
                     </h1>
                     <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                         An auto-registered view page — served at{' '}
-                        <code>/refilament/{props.resource}/{props.record}</code> from the resource's{' '}
+                        <code>{panelUrl(`/${props.resource}/${props.record}`)}</code> from the resource's{' '}
                         <code>getPages()</code> map.
                     </p>
                 </header>
@@ -170,7 +171,7 @@ export default function ResourceView(props: ResourceViewProps) {
 
                 <footer className="mt-6 text-center text-sm">
                     <Link
-                        href={`/refilament/${props.resource}`}
+                        href={panelUrl(`/${props.resource}`)}
                         className="text-indigo-600 transition hover:text-indigo-800 hover:underline"
                     >
                         ← Back to the {props.resourceTitle} list
@@ -218,11 +219,11 @@ function RelationTabPanel({
     // change stays attached to this owner.
     const source = useMemo<TableSource>(
         () => ({
-            index: `/refilament/relation/${props.resource}/${String(props.record)}/${relation.name}`,
+            index: panelUrl(`/relation/${props.resource}/${String(props.record)}/${relation.name}`),
             action: (_recordId, actionName) =>
-                `/refilament/relation/${props.resource}/${String(props.record)}/${relation.name}/action/${actionName}`,
+                panelUrl(`/relation/${props.resource}/${String(props.record)}/${relation.name}/action/${actionName}`),
             record: (recordId) =>
-                `/refilament/relation/${props.resource}/${String(props.record)}/${relation.name}/record/${String(recordId)}`,
+                panelUrl(`/relation/${props.resource}/${String(props.record)}/${relation.name}/record/${String(recordId)}`),
         }),
         [props.resource, props.record, relation.name],
     );

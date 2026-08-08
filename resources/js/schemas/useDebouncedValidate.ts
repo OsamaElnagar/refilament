@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { readCsrfToken } from '@/lib/csrf';
+import { panelUrl } from '@/lib/panel';
 import type { FieldNode } from '@/schemas/types';
 
 const DEBOUNCE_MS = 500;
@@ -18,7 +19,7 @@ export interface DebouncedValidateState {
 }
 
 export function validateUrl(schemaId: string): string {
-    return `/refilament/schema/${encodeURIComponent(schemaId)}/validate`;
+    return panelUrl(`/schema/${encodeURIComponent(schemaId)}/validate`);
 }
 
 /**

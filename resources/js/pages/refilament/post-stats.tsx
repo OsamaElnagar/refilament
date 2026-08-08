@@ -2,6 +2,7 @@ import { Link } from '@inertiajs/react';
 
 import { Card } from '@/components/ui/card';
 import AppShell from '@/components/shell/AppShell';
+import { panelUrl } from '@/lib/panel';
 
 interface PostStatsProps {
     /** The resource's table id — the list route to return to. */
@@ -40,7 +41,7 @@ export default function PostStats(props: PostStatsProps) {
                     </h1>
                     <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                         A custom page from the resource's <code>getPages()</code> map — served at{' '}
-                        <code>/refilament/{props.resource}/stats</code>, props computed server-side.
+                        <code>{panelUrl(`/${props.resource}/stats`)}</code>, props computed server-side.
                     </p>
                 </header>
 
@@ -57,7 +58,7 @@ export default function PostStats(props: PostStatsProps) {
 
                 <footer className="mt-6 text-center text-sm">
                     <Link
-                        href={`/refilament/${props.resource}`}
+                        href={panelUrl(`/${props.resource}`)}
                         className="text-indigo-600 transition hover:text-indigo-800 hover:underline"
                     >
                         ← Back to the {props.resourceTitle} list

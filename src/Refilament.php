@@ -51,9 +51,24 @@ class Refilament
     /**
      * Lazily-built panel config (slice 1.9 — docs/ROADMAP.md "1.9 Panel
      * shell"), assembled from the discovered resources on first access so it
-     * reflects any resources registered earlier in the same request.
+     * reflects any resources registered earlier in the same request. The
+     * cache is invalidated when a consumer panel provider registers
+     * (`registerPanel`) — that happens during provider *registration*, which
+     * for a consumer app runs after the package's own providers have already
+     * booted, so a panel built during package boot must not stick around.
      */
     protected ?Panel $panel = null;
+
+    /**
+     * The consumer's panel factory — the closure a `PanelProvider`'s
+     * `register()` hands over (mirroring Filament's `registerPanel(fn ...)`).
+     * Null until a provider registers, which is the workbench / config-driven
+     * default mode. The factory receives the config-seeded panel and returns
+     * the consumer's override.
+     *
+     * @var (Closure(Panel): Panel)|null
+     */
+    protected ?Closure $panelFactory = null;
 
     /**
      * Discovered relation manager classes, keyed by their parent resource's
@@ -263,13 +278,61 @@ class Refilament
     }
 
     /**
+     * Register the consumer's panel factory (mirroring Filament's
+     * `Filament::registerPanel(fn ...)`). Called from a `PanelProvider`'s
+     * `register()`. Only one panel is supported — registering a second throws
+     * so a consumer mistake fails loudly instead of silently winning the last
+     * factory. Registering invalidates any panel built before the factory was
+     * known (the package may have built one during its own boot, before this
+     * provider registered) — the factory owns the panel from then on, so a
+     * provider that also mutates `panel()` directly should do so in its own
+     * `boot()`, after this registration.
+     */
+    public function registerPanel(Closure $factory): static
+    {
+        if ($this->panelFactory !== null) {
+            throw new LogicException('Only one panel may be registered — Refilament currently supports a single panel provider.');
+        }
+
+        $this->panelFactory = $factory;
+        $this->panel = null;
+
+        return $this;
+    }
+
+    /**
      * The panel config served to the frontend shell (slice 1.9). Built on
      * first access from the currently-discovered resources, lazily so it picks
-     * up every resource registered during the request's bootstrap.
+     * up every resource registered during the request's bootstrap. When a
+     * consumer panel provider registered, its `panel()` override runs on top
+     * of the config-seeded panel; otherwise the config-driven panel is the
+     * whole story (workbench / default mode).
      */
     public function panel(): Panel
     {
-        return $this->panel ??= Panel::make()
+        return $this->panel ??= $this->buildPanel();
+    }
+
+    protected function buildPanel(): Panel
+    {
+        $panel = $this->configPanel();
+
+        if ($this->panelFactory !== null) {
+            $panel = ($this->panelFactory)($panel);
+        }
+
+        return $panel;
+    }
+
+    /**
+     * The config-seeded panel — the defaults from config/refilament.php plus
+     * the discovered resources and pages. The consumer's `panel()` override
+     * receives exactly this, so it only chains what it wants to change
+     * (identity, path, colors, middleware, widgets, render hooks).
+     */
+    protected function configPanel(): Panel
+    {
+        return Panel::make()
             ->resources($this->getResources())
             ->pages((array) config('refilament.panel.pages', []))
             ->discoverPages(
@@ -277,15 +340,34 @@ class Refilament
                 (string) config('refilament.panel.pages_namespace'),
             )
             ->id(config('refilament.panel.id', 'refilament'))
+            ->path((string) config('refilament.panel.path', 'refilament'))
             ->brandName(config('refilament.panel.brand_name', 'Refilament'))
             ->brandLogo(config('refilament.panel.brand_logo'))
             ->topNavigation(config('refilament.panel.top_navigation', false))
-            ->dashboardUrl(config('refilament.panel.dashboard_url', '/refilament'))
+            ->dashboardUrl(config('refilament.panel.dashboard_url'))
             ->colors(config('refilament.panel.colors', []))
             ->widgets(config('refilament.panel.widgets', []))
+            ->middleware(config('refilament.panel.middleware', []))
             ->authGuard(config('refilament.panel.auth_guard', 'web'))
             ->loginUrl(config('refilament.panel.login_url'))
             ->authMiddleware(config('refilament.panel.auth_middleware', []));
+    }
+
+    /**
+     * Register every package route under the panel's URL prefix — the
+     * dashboard, the typed endpoints and the page routes all live at
+     * /{panel path}/... A consumer's `->path('admin')` therefore moves the
+     * whole panel in one place. Called from the service provider's `booted()`
+     * hook so the panel is resolved after every provider (including a
+     * consumer's PanelProvider) has registered.
+     */
+    public function registerRoutes(): static
+    {
+        RouteFacade::prefix($this->panel()->getPath())->group(static function (): void {
+            require __DIR__.'/../routes/refilament.php';
+        });
+
+        return $this;
     }
 
     /**
@@ -413,13 +495,17 @@ class Refilament
 
             // One shared route serves every standalone panel page — the
             // where() gate restricts it to the declared slugs, mirroring the
-            // shared {resource} route for resource pages. Registered here
-            // (after the resource routes above) so it can't shadow the
-            // exact-path dashboard or collide with a discovered resource id.
-            RouteFacade::get('/refilament/{page}', [PanelPageController::class, 'show'])
-                ->where('page', implode('|', array_map('preg_quote', array_keys($pageSlugs))))
-                ->middleware([PanelAuthenticate::class])
-                ->name('refilament.page');
+            // shared {resource} route for resource pages. Registered under the
+            // panel's path (like every other panel route) and after the
+            // resource routes above, so it can't shadow the exact-path
+            // dashboard or collide with a discovered resource id.
+            RouteFacade::prefix($this->panel()->getPath())
+                ->middleware([...$this->panel()->getMiddleware(), PanelAuthenticate::class])
+                ->group(static function () use ($pageSlugs): void {
+                    RouteFacade::get('{page}', [PanelPageController::class, 'show'])
+                        ->where('page', implode('|', array_map('preg_quote', array_keys($pageSlugs))))
+                        ->name('refilament.page');
+                });
         }
 
         return $this;

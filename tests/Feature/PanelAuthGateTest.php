@@ -3,11 +3,13 @@
 declare(strict_types=1);
 
 use Refilament\Refilament\Http\Middleware\Authenticate as PanelAuthenticate;
+use Refilament\Refilament\Refilament;
 use Workbench\App\Models\User;
 
 it('serves the shell pages openly by default', function () {
-    // The panel auth gate is off unless `auth_middleware` lists it — the
-    // permissive default that keeps the workbench (and a fresh install) open.
+    // The panel auth gate is off unless the live panel's authMiddleware()
+    // enlists it — the permissive default that keeps the workbench (and a
+    // fresh install) open.
     $this->get('/refilament', ['X-Inertia' => 'true'])
         ->assertOk()
         ->assertJsonPath('component', 'refilament/dashboard');
@@ -18,8 +20,11 @@ it('serves the shell pages openly by default', function () {
 });
 
 it('redirects unauthenticated visitors to the login url when the gate is enabled', function () {
-    config()->set('refilament.panel.auth_middleware', [PanelAuthenticate::class]);
-    config()->set('refilament.panel.login_url', '/login');
+    // The gate reads the *live* panel per request, so arming it on the
+    // resolved panel instance is enough — no config, no re-registration.
+    app(Refilament::class)->panel()
+        ->authMiddleware([PanelAuthenticate::class])
+        ->loginUrl('/login');
 
     $this->get('/refilament', ['X-Inertia' => 'true'])
         ->assertRedirect('/login');
@@ -31,8 +36,9 @@ it('redirects unauthenticated visitors to the login url when the gate is enabled
 it('lets an authenticated user through the gate', function () {
     $user = User::factory()->create();
 
-    config()->set('refilament.panel.auth_middleware', [PanelAuthenticate::class]);
-    config()->set('refilament.panel.login_url', '/login');
+    app(Refilament::class)->panel()
+        ->authMiddleware([PanelAuthenticate::class])
+        ->loginUrl('/login');
 
     $this->actingAs($user)
         ->get('/refilament', ['X-Inertia' => 'true'])

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { readCsrfToken } from '@/lib/csrf';
+import { panelUrl } from '@/lib/panel';
 import type { FieldNode, SelectOption } from '@/schemas/types';
 
 const DEBOUNCE_MS = 300;
 
-const RESOLVE_OPTIONS_URL = '/refilament/schema/resolve-options';
+const RESOLVE_OPTIONS_URL = panelUrl('/schema/resolve-options');
 
 export interface DependentOptionsState {
     optionsByField: Record<string, SelectOption[]>;

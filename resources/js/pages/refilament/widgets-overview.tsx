@@ -1,6 +1,7 @@
 import { Link } from '@inertiajs/react';
 
 import AppShell from '@/components/shell/AppShell';
+import { panelUrl } from '@/lib/panel';
 import { WidgetRenderer } from '@/widgets/WidgetRenderer';
 import type { RefilamentWidget } from '@/widgets/types';
 
@@ -23,7 +24,7 @@ export default function WidgetsOverview(props: WidgetsOverviewProps) {
                     <h1 className="text-2xl font-semibold tracking-tight text-foreground">Widgets</h1>
                     <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                         Widgets served as static JSON nodes from{' '}
-                        <code>/refilament/widgets</code> — a stats overview and a chart —
+                        <code>{panelUrl('/widgets')}</code> — a stats overview and a chart —
                         rendered without any polling or round trips.
                     </p>
                 </header>
@@ -36,7 +37,7 @@ export default function WidgetsOverview(props: WidgetsOverviewProps) {
 
                 <footer className="mt-8 text-center text-sm">
                     <Link
-                        href="/refilament/playground"
+                        href={panelUrl('/playground')}
                         className="text-indigo-600 transition hover:text-indigo-800 hover:underline"
                     >
                         Back to the playground

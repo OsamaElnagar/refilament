@@ -44,6 +44,7 @@ import {
     TableHeader,
     TableRow as TableRowPrimitive,
 } from '@/components/ui/table';
+import { panelUrl } from '@/lib/panel';
 import { cn } from '@/lib/utils';
 import ActionModal from '@/tables/action-modal';
 import { Cell } from '@/tables/cell';
@@ -448,7 +449,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
         try {
             const actionUrl = source
                 ? source.action(row.id, action.name)
-                : `/refilament/table/${tableId}/action/${action.name}`;
+                : panelUrl(`/table/${tableId}/action/${action.name}`);
 
             const response = await fetch(actionUrl, {
                 method: 'POST',
@@ -491,7 +492,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
         setRunningBulkAction(action.name);
 
         try {
-            const response = await fetch(`/refilament/table/${tableId}/bulk/${action.name}`, {
+            const response = await fetch(panelUrl(`/table/${tableId}/bulk/${action.name}`), {
                 method: 'POST',
                 headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
                 body: JSON.stringify({ records: [...selectedRecords].map(String) }),
@@ -804,7 +805,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
 
         const params = buildTableParams(page, perPage, sorting, searchTerm, columnFilters, group);
 
-        const indexUrl = source ? source.index : `/refilament/table/${tableId}`;
+        const indexUrl = source ? source.index : panelUrl(`/table/${tableId}`);
 
         fetch(`${indexUrl}?${params.toString()}`, {
             headers: { Accept: 'application/json' },

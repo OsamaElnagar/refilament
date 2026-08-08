@@ -9,6 +9,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { panelUrl } from '@/lib/panel';
 import SchemaRenderer from '@/schemas/SchemaRenderer';
 import { CONTRACT_VERSION } from '@/schemas/types';
 import type { SchemaDocument } from '@/schemas/types';
@@ -98,8 +99,8 @@ export default function ActionModal({ action, open, onClose, onSucceeded, record
         setRecordData(null);
 
         const documentUrl = operation
-            ? `/refilament/schema/${encodeURIComponent(schemaId)}?operation=${encodeURIComponent(operation)}`
-            : `/refilament/schema/${encodeURIComponent(schemaId)}`;
+            ? panelUrl(`/schema/${encodeURIComponent(schemaId)}?operation=${encodeURIComponent(operation)}`)
+            : panelUrl(`/schema/${encodeURIComponent(schemaId)}`);
 
         const documentRequest = fetch(documentUrl, {
             headers: { Accept: 'application/json' },
@@ -114,7 +115,7 @@ export default function ActionModal({ action, open, onClose, onSucceeded, record
         const recordRequest =
             recordId !== undefined && tableId !== undefined
                 ? fetch(
-                      `${recordUrl ?? `/refilament/table/${tableId}/record/${String(recordId)}`}?schema=${encodeURIComponent(schemaId)}`,
+                      `${recordUrl ?? panelUrl(`/table/${tableId}/record/${String(recordId)}`)}?schema=${encodeURIComponent(schemaId)}`,
                       { headers: { Accept: 'application/json' } },
                   ).then(async (response) => {
                       if (!response.ok) {

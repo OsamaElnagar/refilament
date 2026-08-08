@@ -9,6 +9,7 @@ import { CONTRACT_VERSION } from '@/schemas/types';
 import type { SchemaDocument } from '@/schemas/types';
 import type { TablePayload } from '@/tables/types';
 import TableRenderer, { type TableSource } from '@/tables/TableRenderer';
+import { panelUrl } from '@/lib/panel';
 
 /** A relation manager the resource registered — rendered as a tab under the form. */
 interface RelationTab {
@@ -94,7 +95,7 @@ export default function ResourceEdit(props: ResourceEditProps) {
                     </h1>
                     <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                         An auto-registered edit page — served at{' '}
-                        <code>/refilament/{props.resource}/{props.record}/edit</code> from the
+                        <code>{panelUrl(`/${props.resource}/${props.record}/edit`)}</code> from the
                         resource's <code>getPages()</code> map, pre-filled from the record and saved
                         through the typed update endpoint.
                     </p>
@@ -128,11 +129,11 @@ export default function ResourceEdit(props: ResourceEditProps) {
                             errors={props.errors}
                             schemaId={props.id}
                             submitLabel={`Save ${props.resourceTitle}`}
-                            submitUrl={`/refilament/table/${props.resource}/record/${props.record}`}
+                            submitUrl={panelUrl(`/table/${props.resource}/record/${props.record}`)}
                             submitRecord={props.record}
                             submitRecordInUrl
                             operation="edit"
-                            onSuccess={() => router.visit(`/refilament/${props.resource}`)}
+                            onSuccess={() => router.visit(panelUrl(`/${props.resource}`))}
                         />
                     </Card>
                 ) : null}
@@ -187,11 +188,11 @@ function RelationTabPanel({
     // the page, so the object identity is stable across renders.
     const source = useMemo<TableSource>(
         () => ({
-            index: `/refilament/relation/${props.resource}/${String(props.record)}/${relation.name}`,
+            index: panelUrl(`/relation/${props.resource}/${String(props.record)}/${relation.name}`),
             action: (_recordId, actionName) =>
-                `/refilament/relation/${props.resource}/${String(props.record)}/${relation.name}/action/${actionName}`,
+                panelUrl(`/relation/${props.resource}/${String(props.record)}/${relation.name}/action/${actionName}`),
             record: (recordId) =>
-                `/refilament/relation/${props.resource}/${String(props.record)}/${relation.name}/record/${String(recordId)}`,
+                panelUrl(`/relation/${props.resource}/${String(props.record)}/${relation.name}/record/${String(recordId)}`),
         }),
         [props.resource, props.record, relation.name],
     );

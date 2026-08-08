@@ -70,23 +70,46 @@ a prebuilt bundle (no npm setup in the consumer).
 
 ```bash
 composer require osamaelnagar/refilament
+
+php artisan refilament:install
 ```
 
-The package registers itself (service provider auto-discovery) and publishes its assets:
+The install command publishes the config, the prebuilt React bundle and the migrations, generates
+a consumer-owned **panel provider** (`app/Providers/RefilamentPanelProvider.php`) and registers it
+in `bootstrap/providers.php` — the Filament flow. Then migrate and open `/refilament`:
 
 ```bash
-php artisan vendor:publish --tag="refilament-assets"
-php artisan vendor:publish --tag="refilament-migrations"
 php artisan migrate
 ```
 
-`refilament-assets` copies the prebuilt React bundle to `public/vendor/refilament` — the panel's
-pages load it through the package's own root view, so the consumer app's Vite bundle is never
-touched. Publish the config too if you want to tweak defaults:
+The panel provider is where you own the panel — it receives the config-seeded panel and chains
+your overrides, Filament-style:
 
-```bash
-php artisan vendor:publish --tag="refilament-config"
+```php
+class RefilamentPanelProvider extends PanelProvider
+{
+    public function panel(Panel $panel): Panel
+    {
+        return $panel
+            ->path('admin')                             // the panel's URL prefix
+            ->brandName('My App')
+            ->colors(['primary' => '#e11d48'])
+            // ->middleware(['web'])                    // sessions + CSRF on the panel's routes
+            // ->authMiddleware([Authenticate::class])  // turn the access gate on
+            // ->loginUrl('/login')
+            // ->widgets([StatsOverview::class])
+            // ->renderHook('sidebar-footer', 'my-component')
+            // ->databaseNotifications()
+            ;
+    }
+}
 ```
+
+Every panel route — the dashboard, resource pages, standalone pages and the typed endpoints —
+lives under the panel's `path`, and the shell builds its own URLs (search, notifications, table
+and relation endpoints) from the same path, so `->path('admin')` moves the whole panel to
+`/admin`. The prebuilt bundle loads through the package's own root view, so the consumer app's
+Vite bundle is never touched.
 
 ### 2. Create your first resource
 
@@ -144,6 +167,8 @@ class PostResource extends Resource
   and standalone pages.
 - **Panel shell** — sidebar navigation (groups, collapse persistence), brand + theme colors,
   dark mode, global search (Cmd/Ctrl+K), database-notifications bell.
+- **Panel provider** — a consumer-owned `PanelProvider` (`panel(Panel $panel): Panel`) registered
+  by `refilament:install`: path, brand, colors, middleware, auth gate, widgets and render hooks.
 - **Widgets** — stats overview, bar/line/pie/doughnut charts (with optional polling + filters),
   table widgets.
 - **Infolists** — read-only record display on view pages.
@@ -166,7 +191,7 @@ npm run dev            # workbench Vite dev server (hot reload)
 composer serve         # workbench app at http://127.0.0.1:8000
 ```
 
-Run the test suite with `composer test` (PHPStan + Pint + Pest, 560 tests green).
+Run the test suite with `composer test` (PHPStan + Pint + Pest, 573 tests green).
 
 ## Changelog
 
@@ -181,12 +206,12 @@ matrix, `vendor:publish` consumer smoke test) — plus the deferred items listed
 
 **Known beta limitations (deliberate, tracked in the roadmap):**
 
-- **Package routes are not in the `web` middleware group.** `routes/refilament.php` registers at the
-  root, so refilament routes have no session, no CSRF enforcement, and no Inertia version header —
-  the panel works, but in-app Inertia navigation falls back to full page loads, the notifications
-  bell needs a session to resolve the user, and `csrf_token()` renders an empty meta tag. Wrapping
-  the shell routes in `web` is the stable-v1 fix (it requires reworking the CSRF-free POST test
-  suite, so it is deferred rather than rushed into the beta).
+- **Panel routes are not in the `web` middleware group by default.** A fresh panel has no session,
+  no CSRF enforcement, and no Inertia version header — the panel works, but in-app Inertia
+  navigation falls back to full page loads and the notifications bell needs a session to resolve
+  the user. This is an explicit opt-in: add `->middleware(['web'])` to the panel provider to get
+  sessions + CSRF on every panel route (the default stays bare so a fresh install works with zero
+  configuration).
 
 ## Contributing
 
