@@ -1,0 +1,27 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use Refilament\Refilament\Pages\Page;
+
+class {{ class }} extends Page
+{
+    public static function getInertiaComponent(): string
+    {
+        return '{{ component }}';
+    }
+
+    public static function getPayload(): array
+    {
+        return [
+            // The Inertia props for this page (docs/CONTRACT.md, "Pages").
+            // Wire a route to it in the app, e.g.:
+            // Route::get('/refilament/{{ slug }}', fn () => Inertia::render(
+            //     static::getInertiaComponent(),
+            //     static::getPayload(),
+            // ));
+        ];
+    }
+}

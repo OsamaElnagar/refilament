@@ -1,0 +1,45 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use Refilament\Refilament\Resources\Resource;
+use Refilament\Refilament\Schemas\Components\TextInput;
+use Refilament\Refilament\Schemas\Schema;
+use Refilament\Refilament\Tables\Column;
+use Refilament\Refilament\Tables\Table;
+use {{ modelImport }};
+
+class {{ class }} extends Resource
+{
+    /**
+     * The Eloquent model this resource manages.
+     *
+     * @var class-string
+     */
+    protected static ?string $model = {{ modelShort }}::class;
+
+    // Override to change the ids the typed endpoints serve this resource under:
+    // protected static ?string $tableId = 'posts';
+    // protected static ?string $formId = 'post-form';
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->id(static::getTableId())
+            ->columns([
+{{ tableBody }}
+            ])
+            ->query({{ modelShort }}::query());
+    }
+
+    public static function form(Schema $schema): Schema
+    {
+        return $schema
+            ->id(static::getFormId())
+            ->components([
+{{ formBody }}
+            ]);
+    }
+}

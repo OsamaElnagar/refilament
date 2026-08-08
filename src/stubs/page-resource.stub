@@ -1,0 +1,29 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use Refilament\Refilament\Resources\Pages\Page;
+
+class {{ class }} extends Page
+{
+    /**
+     * The resource this page belongs to.
+     *
+     * @var class-string<Refilament\Refilament\Resources\Resource>
+     */
+    protected static ?string $resource = {{ resource }}::class;
+
+    public static function getInertiaComponent(): string
+    {
+        return '{{ component }}';
+    }
+
+    public static function getViewData(string $resource): array
+    {
+        return [
+            // Extra Inertia props for this page (docs/CONTRACT.md, "Pages").
+        ];
+    }
+}

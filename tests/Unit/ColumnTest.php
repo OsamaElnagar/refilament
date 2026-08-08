@@ -1,0 +1,217 @@
+<?php
+
+declare(strict_types=1);
+
+use Illuminate\Support\Carbon;
+use Refilament\Refilament\Tables\Column;
+use Workbench\App\Models\Post;
+use Workbench\App\Models\User;
+
+it('resolves the label from the column name', function () {
+    expect(Column::make('published_at')->getLabel())->toBe('Published At');
+});
+
+it('resolves the label from the last dot-notation segment', function () {
+    expect(Column::make('user.name')->getLabel())->toBe('Name');
+});
+
+it('prefers an explicit label over the derived one', function () {
+    expect(Column::make('user.name')->label('Author')->getLabel())->toBe('Author');
+});
+
+it('formats money with the given currency and divisor', function () {
+    $post = Post::factory()->create(['views' => 12345]);
+
+    $cell = Column::make('views')->money('USD', 100)->getStateFor($post);
+
+    expect($cell)->toBe('$123.45');
+});
+
+it('formats a raw number with grouped thousands', function () {
+    $post = Post::factory()->create(['views' => 1234567]);
+
+    $cell = Column::make('views')->numeric()->getStateFor($post);
+
+    expect($cell)->toBe('1,234,567');
+});
+
+it('formats a date', function () {
+    $post = Post::factory()->create(['published_at' => Carbon::parse('2026-01-15 10:30:00')]);
+
+    $cell = Column::make('published_at')->date('Y-m-d')->getStateFor($post);
+
+    expect($cell)->toBe('2026-01-15');
+});
+
+it('formats a date and time', function () {
+    $post = Post::factory()->create(['published_at' => Carbon::parse('2026-01-15 10:30:00')]);
+
+    $cell = Column::make('published_at')->dateTime('Y-m-d H:i')->getStateFor($post);
+
+    expect($cell)->toBe('2026-01-15 10:30');
+});
+
+it('formats a time only', function () {
+    $post = Post::factory()->create(['published_at' => Carbon::parse('2026-01-15 10:30:00')]);
+
+    $cell = Column::make('published_at')->time('H:i')->getStateFor($post);
+
+    expect($cell)->toBe('10:30');
+});
+
+it('truncates a value to a character limit', function () {
+    $post = Post::factory()->create(['title' => 'A dramatically long post title that should get truncated for display']);
+
+    $cell = Column::make('title')->limit(10)->getStateFor($post);
+
+    expect($cell)->toBe('A dramat...');
+});
+
+it('prepends and appends static text', function () {
+    $post = Post::factory()->create(['views' => 5]);
+
+    $cell = Column::make('views')->prefix('+')->suffix('%')->getStateFor($post);
+
+    expect($cell)->toBe('+5%');
+});
+
+it('formats a null state as null for money and numeric', function () {
+    expect(
+        Column::make('views')->money()->getStateFor(Post::factory()->make(['views' => null])),
+    )->toBeNull();
+    expect(
+        Column::make('views')->numeric()->getStateFor(Post::factory()->make(['views' => null])),
+    )->toBeNull();
+});
+
+it('serializes a plain column as a scalar cell', function () {
+    $post = Post::factory()->create(['views' => 3]);
+
+    expect(Column::make('views')->serializeCell($post))->toBe(3);
+});
+
+it('serializes a badge column to a structured cell with a color', function () {
+    $post = Post::factory()->create(['status' => 'published']);
+
+    $column = Column::make('status')
+        ->badge()
+        ->color(fn (string $state): string => $state === 'published' ? 'success' : 'secondary');
+
+    expect($column->serializeCell($post))->toBe([
+        'value' => 'published',
+        'badge' => true,
+        'color' => 'success',
+    ]);
+});
+
+it('resolves a per-record color for the badge', function () {
+    $column = Column::make('status')
+        ->badge()
+        ->color(fn (string $state): string => $state === 'draft' ? 'warning' : 'secondary');
+
+    $draft = Post::factory()->create(['status' => 'draft']);
+    $published = Post::factory()->create(['status' => 'published']);
+
+    expect($column->serializeCell($draft)['color'])->toBe('warning');
+    expect($column->serializeCell($published)['color'])->toBe('secondary');
+});
+
+it('colors a column from a static color', function () {
+    $post = Post::factory()->create(['status' => 'draft']);
+
+    $cell = Column::make('status')->color('danger')->serializeCell($post);
+
+    expect($cell['color'])->toBe('danger');
+    expect($cell)->toHaveKey('value', 'draft');
+});
+
+it('maps states to colors via colors()', function () {
+    $column = Column::make('status')->colors([
+        'published' => 'success',
+        'draft' => 'warning',
+    ]);
+
+    $published = Post::factory()->create(['status' => 'published']);
+    $draft = Post::factory()->create(['status' => 'draft']);
+
+    expect($column->serializeCell($published)['color'])->toBe('success');
+    expect($column->serializeCell($draft)['color'])->toBe('warning');
+});
+
+it('resolves an icon and icon color', function () {
+    $post = Post::factory()->create(['status' => 'published']);
+
+    $column = Column::make('status')
+        ->badge()
+        ->icon('check')
+        ->iconColor('success');
+
+    expect($column->serializeCell($post))->toHaveKey('icon', 'check');
+    expect($column->serializeCell($post))->toHaveKey('iconColor', 'success');
+});
+
+it('wraps a cell in a url', function () {
+    $column = Column::make('title')->url('/posts/{record}');
+
+    $post = Post::factory()->create(['title' => 'My Post']);
+
+    $cell = $column->serializeCell($post);
+
+    expect($cell['url'])->toBe('/posts/'.$post->getKey());
+    expect($cell['value'])->toBe('My Post');
+});
+
+it('marks a cell url as open-in-new-tab', function () {
+    $column = Column::make('title')->url('/x')->openUrlInNewTab();
+
+    expect($column->serializeCell(Post::factory()->create())['openUrlInNewTab'])->toBeTrue();
+});
+
+it('uses a state resolver for related attributes', function () {
+    $user = User::factory()->create(['name' => 'Ada Lovelace']);
+    $post = Post::factory()->create(['user_id' => $user->id]);
+
+    $column = Column::make('title')
+        ->getStateUsing(static fn (Post $record): ?string => $record->user?->name);
+
+    expect($column->getStateFor($post))->toBe('Ada Lovelace');
+});
+
+it('emits nothing extra on the definition for a plain column', function () {
+    $payload = Column::make('title')->toArray();
+
+    expect($payload)->toBe(['name' => 'title', 'label' => 'Title']);
+});
+
+it('emits a badge flag on the definition', function () {
+    $payload = Column::make('status')->badge()->toArray();
+
+    expect($payload['badge'])->toBeTrue();
+});
+
+it('emits url flags on the definition', function () {
+    $payload = Column::make('title')->url('/posts/{record}')->openUrlInNewTab()->toArray();
+
+    expect($payload['url'])->toBeTrue();
+    expect($payload['openUrlInNewTab'])->toBeTrue();
+});
+
+it('never serializes formatter or resolver closures', function () {
+    $payload = Column::make('views')
+        ->getStateUsing(static fn (mixed $record): mixed => $record)
+        ->money()
+        ->toArray();
+
+    expect($payload)->not()->toHaveKey('getStateUsing');
+    expect($payload)->not()->toHaveKey('formatStateUsing');
+});
+
+it('serializes the state through formatStateUsing', function () {
+    $post = Post::factory()->create(['views' => 4]);
+
+    $column = Column::make('views')->formatStateUsing(
+        static fn (int $state): string => $state > 3 ? 'high' : 'low',
+    );
+
+    expect($column->getStateFor($post))->toBe('high');
+});
