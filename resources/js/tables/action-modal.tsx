@@ -55,6 +55,13 @@ interface ActionModalProps {
 export default function ActionModal({ action, open, onClose, onSucceeded, recordId, tableId, submitUrl, recordUrl }: ActionModalProps) {
     const schemaId = action.schema;
 
+    // The form operation drives operation-aware serialization + validation
+    // (slice C6): a `hiddenOn('create')` field hides on create but renders on
+    // edit, and never fails an invisible "required". The document fetch
+    // carries it as a query param; the create/edit pages serialize with it
+    // server-side already.
+    const operation = action.type === 'create' || action.type === 'edit' ? action.type : undefined;
+
     // Bumped on every open so the fetches restart and the form remounts with
     // fresh values — stale validation errors can never leak into a new form.
     const [session, setSession] = useState(0);
@@ -90,7 +97,11 @@ export default function ActionModal({ action, open, onClose, onSucceeded, record
         setDocument(null);
         setRecordData(null);
 
-        const documentRequest = fetch(`/refilament/schema/${encodeURIComponent(schemaId)}`, {
+        const documentUrl = operation
+            ? `/refilament/schema/${encodeURIComponent(schemaId)}?operation=${encodeURIComponent(operation)}`
+            : `/refilament/schema/${encodeURIComponent(schemaId)}`;
+
+        const documentRequest = fetch(documentUrl, {
             headers: { Accept: 'application/json' },
         }).then(async (response) => {
             if (!response.ok) {
@@ -227,6 +238,7 @@ export default function ActionModal({ action, open, onClose, onSucceeded, record
                             ? submitUrl ?? `/refilament/table/${tableId}/action/${action.name}`
                             : submitUrl}
                         submitRecord={isEdit ? recordId : undefined}
+                        operation={operation}
                         onSuccess={handleSucceeded}
                     />
                 ) : null}

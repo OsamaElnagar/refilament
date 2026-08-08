@@ -61,13 +61,13 @@ class Fieldset extends Layout
         return $this->columns;
     }
 
-    public function toArray(): array
+    public function toArray(?string $operation = null): array
     {
         return $this->filterNullValues([
             'type' => $this->getType(),
             'label' => $this->label,
             'columns' => $this->columns,
-            'schema' => $this->serializeChildren(),
+            'schema' => $this->serializeChildren($operation),
         ]);
     }
 }

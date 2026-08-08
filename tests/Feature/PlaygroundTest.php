@@ -9,7 +9,7 @@ it('serves the schema playground as an Inertia page', function () {
     $response->assertJsonPath('component', 'refilament/playground');
     $response->assertJsonPath('props.id', 'playground');
     $response->assertJsonPath('props.contract', 1);
-    $response->assertJsonCount(6, 'props.schema');
+    $response->assertJsonCount(7, 'props.schema');
 
     // Section 1 — post details, containing a 2-column grid.
     $response->assertJsonPath('props.schema.0.type', 'section');
@@ -142,6 +142,30 @@ it('serves the schema playground as an Inertia page', function () {
     $response->assertJsonPath('props.schema.5.schema.1.schema.1.label', 'Plan');
     $response->assertJsonPath('props.schema.5.schema.1.schema.1.schema.0.name', 'plan_tier');
 
+    // Section 7 — invoice arithmetic (slice C3): computed fields carry their
+    // client-side expression as data, rendered read-only.
+    $response->assertJsonPath('props.schema.6.type', 'section');
+    $response->assertJsonPath('props.schema.6.heading', 'Invoice arithmetic');
+    $response->assertJsonPath('props.schema.6.schema.0.type', 'grid');
+    $response->assertJsonPath('props.schema.6.schema.0.columns', 2);
+
+    $response->assertJsonPath('props.schema.6.schema.0.schema.0.name', 'quantity');
+    $response->assertJsonPath('props.schema.6.schema.0.schema.0.default', 2);
+    $response->assertJsonPath('props.schema.6.schema.0.schema.1.name', 'unit_price');
+    $response->assertJsonPath('props.schema.6.schema.0.schema.1.default', 49.99);
+
+    $response->assertJsonPath('props.schema.6.schema.0.schema.2.name', 'subtotal');
+    $response->assertJsonPath('props.schema.6.schema.0.schema.2.computed', 'quantity * unit_price');
+    $response->assertJsonPath('props.schema.6.schema.0.schema.2.readOnly', true);
+    $response->assertJsonPath('props.schema.6.schema.0.schema.2.validation', ['numeric', 'nullable']);
+
+    $response->assertJsonPath('props.schema.6.schema.0.schema.3.name', 'vat_amount');
+    $response->assertJsonPath('props.schema.6.schema.0.schema.3.computed', 'subtotal * 0.14');
+
+    $response->assertJsonPath('props.schema.6.schema.0.schema.4.name', 'total_amount');
+    $response->assertJsonPath('props.schema.6.schema.0.schema.4.computed', 'subtotal + vat_amount');
+    $response->assertJsonPath('props.schema.6.schema.0.schema.4.columnSpan', 2);
+
     $response->assertJsonPath('props.data', [
         'title' => '',
         'slug' => '',
@@ -163,6 +187,11 @@ it('serves the schema playground as an Inertia page', function () {
         'website' => '',
         'plan_frequency' => 'monthly',
         'plan_tier' => 'pro',
+        'quantity' => 2,
+        'unit_price' => 49.99,
+        'subtotal' => null,
+        'vat_amount' => null,
+        'total_amount' => null,
     ]);
     $response->assertJsonPath('props.errors', []);
 });

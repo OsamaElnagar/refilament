@@ -22,6 +22,8 @@ class CreateRecord extends Page
 
     public static function getPayload(string $resource, Refilament $refilament, ?string $record = null): array
     {
+        static::authorizeCreate($resource);
+
         $class = $refilament->getResourceClass($resource);
 
         if ($class === null) {
@@ -37,8 +39,10 @@ class CreateRecord extends Page
         // Merge order is deliberate: the page-level props (resource,
         // resourceTitle, view data) spread last so they are authoritative
         // over any schema payload key of the same name.
+        // Serialized for the create operation so `hiddenOn('create')` /
+        // `disabledOn('create')` fields render accordingly (slice C6).
         return [
-            ...$schema->toArray(),
+            ...$schema->toArray('create'),
             'data' => $class::formData(),
             'errors' => [],
             ...parent::getPayload($resource, $refilament),

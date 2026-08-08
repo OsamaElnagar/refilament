@@ -8,6 +8,8 @@ it('shares the panel shell navigation on every Inertia page', function () {
         ->assertJsonPath('props.refilament.panel.brandName', 'Refilament')
         ->assertJsonPath('props.refilament.panel.id', 'refilament')
         ->assertJsonPath('props.refilament.panel.sidebarCollapsible', false)
+        ->assertJsonPath('props.refilament.panel.renderHooks.sidebar-footer', 'quick-links')
+        ->assertJsonPath('props.refilament.panel.notifications.polling', '10s')
         ->assertJsonStructure([
             'props' => [
                 'refilament' => [
@@ -48,11 +50,54 @@ it('serves the dashboard with the registered widgets', function () {
         ->assertOk()
         ->assertJsonPath('component', 'refilament/dashboard')
         ->assertJsonPath('props.refilament.panel.brandName', 'Refilament')
+        ->assertJsonPath('props.widgets.0.type', 'stats_overview')
+        ->assertJsonPath('props.widgets.1.type', 'table')
+        ->assertJsonPath('props.widgets.1.table.id', 'recent-posts-table')
         ->assertJsonStructure([
             'props' => [
                 'widgets' => [
-                    '*' => ['type', 'stats'],
+                    '*' => ['type'],
                 ],
             ],
         ]);
+});
+
+it('renders refilament pages through the package root view', function () {
+    // A non-X-Inertia request renders the root view. The package pages must
+    // render through refilament::app (v1 shipping — docs/ARCHITECTURE.md
+    // "Frontend delivery"), which in the workbench (no published assets)
+    // falls back to @vite; in a consumer it loads the prebuilt bundle.
+    $html = $this->get('/refilament')->assertOk()->getContent();
+
+    expect($html)
+        ->toContain('<div id="app"')
+        ->toContain('<title>');
+
+    // The workbench has no published vendor/refilament bundle, so the view
+    // must have taken the @vite fallback — never reference the prebuilt.
+    expect($html)->not->toContain('vendor/refilament/refilament.js');
+});
+
+it('renders the prebuilt bundle when the consumer assets are published', function () {
+    // Simulate a consumer: drop the bundle where vendor:publish puts it, so
+    // the root view takes the published-assets branch. In the workbench the
+    // public dir is workbench/public, so that is where we plant it.
+    $publicDir = public_path('vendor/refilament');
+
+    File::ensureDirectoryExists($publicDir);
+    File::put($publicDir.'/refilament.js', 'console.log("stub");');
+    File::put($publicDir.'/refilament.css', '/* stub */');
+
+    try {
+        $html = $this->get('/refilament')->assertOk()->getContent();
+
+        // asset() emits an absolute URL in tests (http://localhost/...) —
+        // match the path, not the host.
+        expect($html)
+            ->toContain('/vendor/refilament/refilament.js" defer></script>')
+            ->toContain('/vendor/refilament/refilament.css">')
+            ->not->toContain('/build/assets/');
+    } finally {
+        File::deleteDirectory($publicDir);
+    }
 });

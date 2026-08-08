@@ -1,0 +1,20 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use Refilament\Refilament\Schemas\Components\TextInput;
+use Refilament\Refilament\Schemas\Schema;
+
+class {{ class }}
+{
+    public static function configure(Schema $schema): Schema
+    {
+        return $schema
+            ->id('{{ formId }}')
+            ->components([
+{{ body }}
+            ]);
+    }
+}

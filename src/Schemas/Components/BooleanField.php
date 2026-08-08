@@ -14,7 +14,7 @@ namespace Refilament\Refilament\Schemas\Components;
  */
 abstract class BooleanField extends Component
 {
-    protected int|string|bool|null $default = false;
+    protected int|string|bool|float|null $default = false;
 
     protected bool $isInline = false;
 
@@ -66,10 +66,10 @@ abstract class BooleanField extends Component
         return $this;
     }
 
-    public function toArray(): array
+    public function toArray(?string $operation = null): array
     {
         return $this->filterNullValues([
-            ...parent::toArray(),
+            ...parent::toArray($operation),
             'inline' => $this->isInline() ? true : null,
         ]);
     }

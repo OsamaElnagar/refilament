@@ -26,11 +26,11 @@ trait ValidatesSchemaData
      *
      * @param  array<string, mixed>  $data
      */
-    protected function schemaValidator(Schema $schema, array $data, ?string $ignoreRecordKey = null): \Illuminate\Validation\Validator
+    protected function schemaValidator(Schema $schema, array $data, ?string $ignoreRecordKey = null, ?string $operation = null): \Illuminate\Validation\Validator
     {
         $rules = $ignoreRecordKey !== null
-            ? $schema->ignoreCurrentRecordInUniqueRules($schema->getValidationRules(), $ignoreRecordKey)
-            : $schema->getValidationRules();
+            ? $schema->ignoreCurrentRecordInUniqueRules($schema->getValidationRules($operation), $ignoreRecordKey)
+            : $schema->getValidationRules($operation);
 
         $validator = Validator::make($data, $rules);
         $validator->setAttributeNames($schema->getValidationAttributes());
@@ -49,9 +49,9 @@ trait ValidatesSchemaData
      *
      * @throws ValidationException
      */
-    protected function validateSchemaData(Schema $schema, array $data, ?string $ignoreRecordKey = null): array
+    protected function validateSchemaData(Schema $schema, array $data, ?string $ignoreRecordKey = null, ?string $operation = null): array
     {
-        $validator = $this->schemaValidator($schema, $data, $ignoreRecordKey);
+        $validator = $this->schemaValidator($schema, $data, $ignoreRecordKey, $operation);
 
         if ($validator->fails()) {
             throw ValidationException::withMessages($validator->errors()->toArray());

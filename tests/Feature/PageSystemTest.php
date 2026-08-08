@@ -60,8 +60,10 @@ it('serves the view page with the record values', function () {
         ->assertJsonPath('component', 'refilament/resource-view')
         ->assertJsonPath('props.record', $post->id)
         ->assertJsonPath('props.resourceTitle', 'Post')
-        ->assertJsonPath('props.columns.0.name', 'id')
-        ->assertJsonPath('props.values.title', $post->title);
+        // PostResource defines an infolist (slice 3.3), so the view page
+        // drives through its read-only schema rather than the column list.
+        ->assertJsonPath('props.schema.0.name', 'title')
+        ->assertJsonPath('props.schema.0.value', $post->title);
 });
 
 it('404s for a missing record on record pages', function () {

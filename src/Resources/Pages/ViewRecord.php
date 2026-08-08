@@ -31,6 +31,8 @@ class ViewRecord extends Page
     {
         $model = static::getRecordRouteBindingEloquentQuery($resource)->findOrFail((string) $record);
 
+        static::authorizeView($resource, $model);
+
         $table = $refilament->resolveTable($resource);
 
         $resourceClass = $refilament->getResourceClass($resource);
@@ -38,6 +40,19 @@ class ViewRecord extends Page
         $infolist = $resourceClass !== null
             ? $resourceClass::infolist(new Schema)->record($model)
             : new Schema;
+
+        // The relations list drives the relation-manager tabs under the view
+        // (slice 1.8): one entry per manager the resource registers, keyed by
+        // the relationship each hosts and labelled for the tab — the same
+        // shape the edit page serves, so the two record pages share a tab UI.
+        $relations = [];
+
+        foreach ($refilament->getRelationManagers($resource) as $relationship => $manager) {
+            $relations[] = [
+                'name' => $relationship,
+                'label' => $manager::getTitle(),
+            ];
+        }
 
         // Merge order is deliberate: the page-level props (resource,
         // resourceTitle, view data) spread last so they are authoritative
@@ -52,7 +67,7 @@ class ViewRecord extends Page
         // Otherwise fall back to the table columns + values + dataset-wide
         // footer summaries (the pre-infolist view page).
         if ($infolist->getComponents() !== []) {
-            return $payload + ['schema' => $infolist->toArray()['schema']];
+            return $payload + ['relations' => $relations, 'schema' => $infolist->toArray()['schema']];
         }
 
         if ($table !== null) {
@@ -69,6 +84,6 @@ class ViewRecord extends Page
             ];
         }
 
-        return $payload;
+        return $payload + ['relations' => $relations];
     }
 }

@@ -14,6 +14,11 @@ export interface FieldProps {
     checking?: boolean;
     /** Report a value change upward to the form state. */
     onChange?: (value: unknown) => void;
+    /**
+     * Live form-wide values — lets a field evaluate client-side rules like
+     * a hint action's `visibleWhenFilled` against sibling fields.
+     */
+    formValues?: Record<string, unknown>;
 }
 
 export type FieldComponent = ComponentType<FieldProps>;

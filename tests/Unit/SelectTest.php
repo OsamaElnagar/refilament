@@ -2,7 +2,10 @@
 
 declare(strict_types=1);
 
+use LogicException;
 use Refilament\Refilament\Schemas\Components\Select;
+use Workbench\App\Models\Post;
+use Workbench\App\Models\User;
 
 it('serializes a plain select with static options', function () {
     $node = Select::make('status')
@@ -103,3 +106,97 @@ it('reports whether an options resolver is registered', function () {
     expect($plain->resolveOptions([]))->toBe([]);
     expect($resolved->hasOptionsResolver())->toBeTrue();
 });
+
+it('derives options from a backed enum class', function () {
+    $node = Select::make('status')->options(DemoStatus::class)->toArray();
+
+    expect($node['options'])->toBe([
+        ['value' => 'draft', 'label' => 'Draft'],
+        ['value' => 'published', 'label' => 'Published'],
+    ]);
+});
+
+it('uses the enum getLabel() when it declares one', function () {
+    $node = Select::make('status')->options(DemoStatusWithLabel::class)->toArray();
+
+    expect($node['options'])->toBe([
+        ['value' => 'draft', 'label' => 'Draft copy'],
+        ['value' => 'published', 'label' => 'Live'],
+    ]);
+});
+
+it('accepts an enum instance as options', function () {
+    $node = Select::make('status')->options(DemoStatus::Draft)->toArray();
+
+    expect($node['options'])->toBe([
+        ['value' => 'draft', 'label' => 'Draft'],
+        ['value' => 'published', 'label' => 'Published'],
+    ]);
+});
+
+it('rejects a non-backed enum in options()', function () {
+    expect(fn () => Select::make('status')->options(DemoUnitEnum::class))->toThrow(LogicException::class);
+});
+
+it('resolves relationship options at serialization', function () {
+    User::factory()->create(['name' => 'Ada Lovelace']);
+
+    $node = Select::make('user_id')
+        ->label('User')
+        ->relationship('user', 'name')
+        ->model(Post::class)
+        ->toArray();
+
+    expect($node['options'])->toHaveCount(1);
+    expect($node['options'][0]['label'])->toBe('Ada Lovelace');
+});
+
+it('uses getOptionLabelFromRecordUsing for relationship labels', function () {
+    $user = User::factory()->create(['name' => 'Ada Lovelace']);
+
+    $node = Select::make('user_id')
+        ->relationship('user', 'name')
+        ->model(Post::class)
+        ->getOptionLabelFromRecordUsing(fn (User $record): string => "User #{$record->getKey()}")
+        ->toArray();
+
+    expect($node['options'][0]['label'])->toBe("User #{$user->getKey()}");
+});
+
+it('fails fast when a relationship select has no model', function () {
+    expect(fn () => Select::make('user_id')->relationship('user', 'name')->toArray())
+        ->toThrow(LogicException::class);
+});
+
+it('rejects combining relationship() with static options', function () {
+    expect(fn () => Select::make('user_id')
+        ->relationship('user', 'name')
+        ->model(Post::class)
+        ->options(['1' => 'One'])
+        ->toArray())->toThrow(LogicException::class);
+});
+
+enum DemoStatus: string
+{
+    case Draft = 'draft';
+    case Published = 'published';
+}
+
+enum DemoStatusWithLabel: string
+{
+    case Draft = 'draft';
+    case Published = 'published';
+
+    public function getLabel(): string
+    {
+        return match ($this) {
+            self::Draft => 'Draft copy',
+            self::Published => 'Live',
+        };
+    }
+}
+
+enum DemoUnitEnum
+{
+    case Draft;
+}

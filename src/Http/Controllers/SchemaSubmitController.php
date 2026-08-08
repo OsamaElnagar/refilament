@@ -46,7 +46,12 @@ class SchemaSubmitController
             return response()->json(['error' => 'The data must be an array.'], JsonResponse::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        $validator = Validator::make($data, $resolved->getValidationRules());
+        // Operation-aware validation (slice C6): a `hiddenOn('create')` field
+        // must not fail create validation with an invisible "required" error.
+        // The client sends its operation (create vs edit) as a query param.
+        $operation = $request->query('operation');
+
+        $validator = Validator::make($data, $resolved->getValidationRules(is_string($operation) ? $operation : null));
         $validator->setAttributeNames($resolved->getValidationAttributes());
 
         if ($validator->fails()) {

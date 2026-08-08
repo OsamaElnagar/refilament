@@ -76,10 +76,10 @@ abstract class Layout extends Component
      *
      * @return array<int, array<string, mixed>>
      */
-    protected function serializeChildren(): array
+    protected function serializeChildren(?string $operation = null): array
     {
         return array_map(
-            static fn (Component $component): array => $component->toArray(),
+            static fn (Component $component): array => $component->toArray($operation),
             $this->childComponents,
         );
     }

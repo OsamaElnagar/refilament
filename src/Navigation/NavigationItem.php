@@ -21,6 +21,8 @@ class NavigationItem
 
     protected ?string $label = null;
 
+    protected bool $shouldTranslateLabel = false;
+
     protected ?string $group = null;
 
     protected ?string $icon = null;
@@ -78,6 +80,19 @@ class NavigationItem
         return $this;
     }
 
+    /**
+     * Treat the navigation label as a translation key resolved through the
+     * app's translator when the navigation item is serialized. Mirrors
+     * Filament's `translateLabel()`; off by default so labels pass through
+     * verbatim.
+     */
+    public function translateLabel(bool $condition = true): static
+    {
+        $this->shouldTranslateLabel = $condition;
+
+        return $this;
+    }
+
     public function badge(null|int|string $badge): static
     {
         $this->badge = $badge;
@@ -117,7 +132,9 @@ class NavigationItem
 
     public function getLabel(): string
     {
-        return $this->label ?? '';
+        $label = $this->label ?? '';
+
+        return $this->shouldTranslateLabel ? __($label) : $label;
     }
 
     public function getGroup(): ?string

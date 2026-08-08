@@ -29,6 +29,13 @@ function isTruthy(value: unknown): boolean {
  * `nodeHasVisibleDescendant`, not their own fields.
  */
 export function nodeIdIsVisible(node: FieldNode, data: Record<string, unknown>): boolean {
+    // A `hidden` flag (or `hiddenOn(<operation>)`, resolved server-side at
+    // serialization — slice C6) hides the node unconditionally, before any
+    // client-side rules run.
+    if (node.hidden) {
+        return false;
+    }
+
     if (Array.isArray(node.whenTruthy) && node.whenTruthy.length) {
         if (!node.whenTruthy.every((name) => isTruthy(data[name]))) {
             return false;

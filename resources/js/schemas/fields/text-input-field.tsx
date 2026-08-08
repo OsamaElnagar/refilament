@@ -2,13 +2,13 @@ import { useRef, useState } from 'react';
 import { Check, Copy, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import FieldHeader from '@/schemas/field-header';
 import type { FieldProps } from '@/schemas/registry';
 
 const COPY_FEEDBACK_MS = 2000;
 
-export default function TextInputField({ node, value, error, checking, onChange }: FieldProps) {
+export default function TextInputField({ node, value, error, checking, onChange, formValues }: FieldProps) {
     const inputRef = useRef<HTMLInputElement>(null);
     const [isRevealed, setIsRevealed] = useState(false);
     const [isCopied, setIsCopied] = useState(false);
@@ -37,16 +37,7 @@ export default function TextInputField({ node, value, error, checking, onChange 
 
     return (
         <div>
-            <div className="mb-1.5 flex items-baseline justify-between gap-2">
-                <Label htmlFor={node.name}>
-                    {node.label}
-                    {node.required ? <span className="text-destructive"> *</span> : null}
-                </Label>
-
-                {node.helperText ? (
-                    <span className="text-xs text-muted-foreground">{node.helperText}</span>
-                ) : null}
-            </div>
+            <FieldHeader node={node} formValues={formValues} labelId={node.name} />
 
             <div className="relative">
                 <Input
@@ -61,7 +52,7 @@ export default function TextInputField({ node, value, error, checking, onChange 
                     min={node.minValue}
                     max={node.maxValue}
                     step={node.step}
-                    disabled={node.disabled ?? false}
+                    disabled={node.computed !== undefined || (node.disabled ?? node.readOnly ?? false)}
                     autoFocus={node.autofocus ?? false}
                     aria-invalid={error ? true : undefined}
                     className={cn(hasSuffixAction && 'pr-16', error && 'border-destructive focus-visible:ring-destructive/30')}

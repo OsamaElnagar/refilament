@@ -9,6 +9,8 @@ use Inertia\Inertia;
 use Refilament\Refilament\Console\Commands\MakePageCommand;
 use Refilament\Refilament\Console\Commands\MakeResourceCommand;
 use Refilament\Refilament\Console\Commands\RefilamentCommand;
+use Refilament\Refilament\GlobalSearch\Providers\Contracts\GlobalSearchProvider;
+use Refilament\Refilament\GlobalSearch\Providers\DefaultGlobalSearchProvider;
 
 class RefilamentServiceProvider extends ServiceProvider
 {
@@ -20,6 +22,13 @@ class RefilamentServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__.'/../config/refilament.php', 'refilament');
 
         $this->app->singleton(Refilament::class);
+
+        // The global search provider (slice 3.5) — bound to the default
+        // provider but overridable by the app via the Contracts interface.
+        $this->app->bind(
+            GlobalSearchProvider::class,
+            fn (): DefaultGlobalSearchProvider => new DefaultGlobalSearchProvider($this->app->make(Refilament::class)),
+        );
     }
 
     /**

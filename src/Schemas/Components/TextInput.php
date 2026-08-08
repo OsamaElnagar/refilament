@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Refilament\Refilament\Schemas\Components;
 
+use LogicException;
+
 /**
  * Text input field (slice 2).
  *
@@ -47,6 +49,16 @@ class TextInput extends Component
     protected ?string $type = null;
 
     protected ?string $copyMessage = null;
+
+    /**
+     * A client-side arithmetic expression (slice C3) whose result this field
+     * displays and submits — the honest counterpart to Filament's reactive
+     * `afterStateUpdated(Get, Set)` totals. Serialized as data; the React
+     * runtime evaluates it against live form values (no round trip). The DSL
+     * is deliberately tiny: numbers, + - * / % and parentheses, referencing
+     * sibling fields by name. Unresolvable inputs produce a null result.
+     */
+    protected ?string $computedExpression = null;
 
     public function getType(): string
     {
@@ -174,6 +186,32 @@ class TextInput extends Component
         return $this;
     }
 
+    /**
+     * Compute this field's value client-side from an arithmetic expression
+     * over sibling fields (slice C3) — the Ahram invoice idiom
+     * (subtotal = quantity × unit_price; VAT = subtotal × 14%; total =
+     * subtotal + VAT) without a server round trip. Referenced fields must
+     * appear earlier in the schema so the runtime can chain the computation
+     * in declaration order.
+     */
+    public function computed(string $expression): static
+    {
+        $expression = trim($expression);
+
+        if ($expression === '') {
+            throw new LogicException('computed() requires a non-empty expression.');
+        }
+
+        $this->computedExpression = $expression;
+
+        return $this;
+    }
+
+    public function getComputedExpression(): ?string
+    {
+        return $this->computedExpression;
+    }
+
     public function isEmail(): bool
     {
         return $this->isEmail;
@@ -249,10 +287,10 @@ class TextInput extends Component
         };
     }
 
-    public function toArray(): array
+    public function toArray(?string $operation = null): array
     {
         return $this->filterNullValues([
-            ...parent::toArray(),
+            ...parent::toArray($operation),
             'inputType' => $this->getInputType() !== 'text' ? $this->getInputType() : null,
             'minValue' => $this->minValue,
             'maxValue' => $this->maxValue,
@@ -261,6 +299,7 @@ class TextInput extends Component
             'copyable' => $this->isCopyable() ? true : null,
             'copyMessage' => $this->copyMessage,
             'telRegex' => $this->telRegex,
+            'computed' => $this->computedExpression,
         ]);
     }
 }

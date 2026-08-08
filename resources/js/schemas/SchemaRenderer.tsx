@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { renderNotification } from '@/notifications/renderNotification';
 import DebugField from '@/schemas/fields/debug-field';
 import { getField, getLayout } from '@/schemas/registry';
+import { computeComputedValues } from '@/schemas/computed';
 import { flattenNodes } from '@/schemas/tree';
 import { isNodeVisible } from '@/schemas/visibility';
 import type { FieldNode } from '@/schemas/types';
@@ -36,6 +37,12 @@ interface SchemaRendererProps {
     submitRecordInUrl?: boolean;
     /** Called after a successful submit (e.g. to navigate to the created record). */
     onSuccess?: () => void;
+    /**
+     * The form operation ('create' | 'edit') — sent on submit so the server
+     * validates with operation-aware rules (slice C6). The modal action's
+     * type and the create/edit pages supply it.
+     */
+    operation?: string;
 }
 
 export default function SchemaRenderer({
@@ -48,8 +55,19 @@ export default function SchemaRenderer({
     submitRecord,
     submitRecordInUrl,
     onSuccess,
+    operation,
 }: SchemaRendererProps) {
     const [values, setValues] = useState<Record<string, unknown>>(data);
+
+    // Computed fields (slice C3): chained client-side arithmetic. `values`
+    // holds raw edits; computed totals derive from them and from each other
+    // (subtotal → VAT → total) and merge into the view every field reads.
+    const computedValues = useMemo(() => computeComputedValues(schema, values), [schema, values]);
+
+    // The resolved view: raw edits overlaid with live computed totals. Fields
+    // display their value from here, and hint-action visibility rules
+    // (slice C5) evaluate against it too.
+    const resolvedValues = useMemo(() => ({ ...values, ...computedValues }), [values, computedValues]);
 
     // Server-side validation errors, mapped back onto the fields they name
     // (docs/CONTRACT.md, "Form submission"). Rules are server-authoritative;
@@ -66,6 +84,7 @@ export default function SchemaRenderer({
         endpoint: submitUrl,
         record: submitRecord,
         recordInUrl: submitRecordInUrl,
+        operation,
     });
 
     // Surface the submit success through sonner as well as the inline banner
@@ -106,6 +125,106 @@ export default function SchemaRenderer({
         [allNodes, values],
     );
 
+    // Names of every `dehydrated(false)` field (slice C4): rendered and
+    // displayed, but never submitted — the Ahram computed-total idiom.
+    // Stripped from the payload alongside hidden fields; the server also
+    // excludes them from validation, so nothing stale ever reaches the
+    // submit handler.
+    const undehydratedFieldNamesSet = useMemo(
+        () => new Set(allNodes.filter((node) => node.dehydrated === false).map((node) => node.name)),
+        [allNodes],
+    );
+
+    // Form-level validation summary (slice 4.4): one banner listing every
+    // field that currently carries an error, so a multi-field 422 never hides
+    // failures below the fold. Entries come from any error source (initial
+    // page errors, submit-time 422s, live unique-check errors) and are limited
+    // to fields the visibility rules currently render — a hidden field's stale
+    // error is neither shown inline nor in the summary. Entries follow the
+    // schema's own field order (the list reads top-to-bottom like the form);
+    // names the schema doesn't know (e.g. the `errors.form` domain-failure
+    // seat) fall through to the end. Clicking an entry scrolls to and focuses
+    // the field (inputs are keyed by `name`, which is also their DOM id).
+    const nodesByName = useMemo(() => new Map(allNodes.map((node) => [node.name, node])), [allNodes]);
+
+    const summaryEntries = useMemo(() => {
+        const order = new Map(allNodes.map((node, index) => [node.name, index]));
+
+        return Object.entries(fieldErrors)
+            .filter(([name]) => !hiddenFieldNamesSet.has(name))
+            .map(([name, messages]) => ({
+                name,
+                label: nodesByName.get(name)?.label ?? name,
+                message: messages[0] ?? '',
+            }))
+            .sort(
+                (a, b) =>
+                    (order.get(a.name) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.name) ?? Number.MAX_SAFE_INTEGER),
+            );
+    }, [fieldErrors, hiddenFieldNamesSet, nodesByName, allNodes]);
+
+    // The banner is dismissible. Dismissal survives the fix-typing loop — a
+    // field's error clearing as its value changes never re-shows it — but a
+    // fresh submit re-arms it: `submitErrors` only gets a new identity when
+    // the submit endpoint resolves (a 422 mapping new errors, or a success
+    // clearing them), so the next failed attempt always surfaces the banner.
+    const [summaryDismissed, setSummaryDismissed] = useState(false);
+
+    useEffect(() => {
+        setSummaryDismissed(false);
+    }, [submitErrors]);
+
+    const focusField = (name: string): void => {
+        const element = document.getElementById(name);
+
+        if (!(element instanceof HTMLElement)) {
+            return;
+        }
+
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        element.focus({ preventScroll: true });
+    };
+
+    const summary =
+        summaryEntries.length > 0 && !summaryDismissed ? (
+            <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+                <div className="flex items-start justify-between gap-2">
+                    <p className="flex items-center gap-2 text-sm font-medium text-destructive">
+                        <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
+                        {summaryEntries.length === 1
+                            ? 'There is a problem with this form'
+                            : `There are ${summaryEntries.length} problems with this form`}
+                    </p>
+
+                    <button
+                        type="button"
+                        onClick={() => setSummaryDismissed(true)}
+                        aria-label="Dismiss error summary"
+                        className="rounded-md p-1 text-destructive/70 transition hover:bg-destructive/10 hover:text-destructive focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                        <X className="size-4" aria-hidden="true" />
+                    </button>
+                </div>
+
+                <ul className="mt-2 space-y-1">
+                    {summaryEntries.map((entry) => (
+                        <li key={entry.name}>
+                            <button
+                                type="button"
+                                onClick={() => focusField(entry.name)}
+                                className="flex w-full items-baseline gap-2 rounded-md px-1 py-0.5 text-left text-sm text-destructive transition hover:bg-destructive/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                                <span className="font-medium">{entry.label}</span>
+                                {entry.message ? (
+                                    <span className="truncate text-destructive/80">{entry.message}</span>
+                                ) : null}
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+        ) : null;
+
     const handleChange = (name: string) => (value: unknown): void => {
         setValues((current) => ({ ...current, [name]: value }));
         clearFieldError(name);
@@ -117,9 +236,13 @@ export default function SchemaRenderer({
         // Fields hidden by client-side visibility rules carry no value worth
         // validating — strip them so the server never sees a stale value
         // (a conditionally-hidden field with a `required` rule is a developer
-        // bug: required + possibly-hidden stays contradictory).
+        // bug: required + possibly-hidden stays contradictory). The same
+        // applies to `dehydrated(false)` fields (slice C4): shown but never
+        // submitted, so their values never leave the client.
         const visibleData = Object.fromEntries(
-            Object.entries(values).filter(([name]) => !hiddenFieldNamesSet.has(name)),
+            Object.entries({ ...values, ...computedValues }).filter(
+                ([name]) => !hiddenFieldNamesSet.has(name) && !undehydratedFieldNamesSet.has(name),
+            ),
         );
 
         const succeeded = await submit(visibleData);
@@ -151,17 +274,23 @@ export default function SchemaRenderer({
             <Field
                 key={node.name}
                 node={node}
-                value={values[node.name]}
+                value={resolvedValues[node.name]}
                 error={fieldErrors[node.name]?.[0]}
                 options={optionsByField[node.name]}
                 loading={loadingFields[node.name]}
                 checking={checking[node.name]}
                 onChange={handleChange(node.name)}
+                formValues={resolvedValues}
             />
         );
     };
 
-    const fields = <div className="space-y-6">{renderChildren(schema)}</div>;
+    const fields = (
+        <>
+            {summary}
+            <div className="space-y-6">{renderChildren(schema)}</div>
+        </>
+    );
 
     if (!submitLabel) {
         return fields;

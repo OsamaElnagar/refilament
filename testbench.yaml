@@ -5,8 +5,10 @@ env:
   APP_KEY: 'base64:zYxR6/Vy/APuB1HLXWfsn+bewgcSH7a8bNxk37vnkO0='
 
 providers:
+  - Inertia\ServiceProvider
   - Refilament\Refilament\RefilamentServiceProvider
   - Workbench\App\Providers\WorkbenchServiceProvider
+  - Workbench\App\Providers\RefilamentDefaultsServiceProvider
 
 migrations:
   - workbench/database/migrations

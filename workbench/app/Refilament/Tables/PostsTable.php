@@ -94,10 +94,16 @@ class PostsTable
                     ->successMessage('Post published.')
                     ->visible(static fn (Post $record): bool => $record->status !== 'published')
                     ->action(static fn (Post $record): mixed => $record->update(['status' => 'published'])),
+                // Policy-backed authorization (slice 4.1): the delete ability
+                // is declared against Post's policy. With no policy registered
+                // (the fresh-install reality) the permissive default keeps the
+                // action available — authorization only engages once a policy
+                // declares the ability.
                 Action::make('delete')
                     ->label('Delete')
                     ->color('danger')
                     ->requiresConfirmation()
+                    ->authorize('delete')
                     ->successMessage('Post deleted.')
                     ->action(static fn (Post $record): mixed => $record->delete()),
             ])
@@ -141,9 +147,12 @@ class PostsTable
                     default => 'secondary',
                 }),
                 // Relationship column via dot-notation (Slice 2.1): resolves
-                // the related attribute server-side through data_get — no
+                // the related attribute server-side through data_get - no
                 // getStateUsing() needed. Eager-loaded in query() below.
-                Column::make('user.name')->label('User')->toggleable(),
+                // Sortable + searchable (Slice 2.1): a relationship column can
+                // now be sorted by a correlated subquery over the related
+                // table and searched via Eloquent's native whereRelation.
+                Column::make('user.name')->label('User')->sortable()->searchable()->toggleable(),
                 Column::make('views')
                     ->label('Views')
                     ->sortable()
@@ -152,6 +161,13 @@ class PostsTable
                     // filtered result set, computed server-side and rendered
                     // as the table's footer row.
                     ->summarize(Sum::make()->label('Total views')->numeric()),
+                // Macro demo (production reference §1.2): `egp()` is defined
+                // once in RefilamentDefaultsServiceProvider and used here as a
+                // first-class column verb — ad revenue at $0.10 per view.
+                Column::make('revenue')
+                    ->label('Revenue')
+                    ->getStateUsing(fn (Post $record): float => (float) $record->views * 0.1)
+                    ->egp(),
                 // Date formatting (Slice 2.1): the published_at attribute
                 // serializes pre-formatted through Carbon.
                 Column::make('published_at')->label('Published')->placeholder('—')->sortable()->toggleable()->date(),

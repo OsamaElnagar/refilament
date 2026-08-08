@@ -308,7 +308,7 @@ abstract class Entry extends Component
      *
      * @return array<string, mixed>
      */
-    public function toArray(): array
+    public function toArray(?string $operation = null): array
     {
         $record = $this->getRecord();
 

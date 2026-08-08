@@ -3,11 +3,12 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Str;
+use Refilament\Refilament\Refilament;
 use Refilament\Refilament\Resources\Resource;
 use Workbench\App\Models\Post;
 use Workbench\App\Models\User;
 
-it('generates a resource file with columns and fields from the model table', function () {
+it('generates a self-contained resource directory with columns and fields from the model table', function () {
     $path = sys_get_temp_dir().'/refilament-generated-'.Str::random(6);
     $namespace = 'Refilament\\Refilament\\Tests\\Generated';
 
@@ -20,21 +21,32 @@ it('generates a resource file with columns and fields from the model table', fun
         '--generate' => true,
     ])->assertSuccessful();
 
-    $file = $path.'/PostResource.php';
-    expect(file_exists($file))->toBeTrue();
+    $resourceFile = $path.'/Posts/PostResource.php';
+    $schemaFile = $path.'/Posts/Schemas/PostForm.php';
+    $tableFile = $path.'/Posts/Tables/PostsTable.php';
 
-    $content = file_get_contents($file);
-    expect($content)->toContain('class PostResource extends Resource');
-    expect($content)->toContain('protected static ?string $model = '.Str::afterLast(Post::class, '\\').'::class;');
-    expect($content)->toContain("Column::make('id')->label('ID')->sortable(),");
-    expect($content)->toContain("Column::make('title')");
-    expect($content)->toContain("TextInput::make('title')");
-    expect($content)->toContain("TextInput::make('views')");
+    expect(file_exists($resourceFile))->toBeTrue();
+    expect(file_exists($schemaFile))->toBeTrue();
+    expect(file_exists($tableFile))->toBeTrue();
+
+    // The thin resource delegates to the standalone classes.
+    expect(file_get_contents($resourceFile))->toContain('class PostResource extends Resource');
+    expect(file_get_contents($resourceFile))->toContain('PostsTable::configure($table)');
+    expect(file_get_contents($resourceFile))->toContain('PostForm::configure($schema)');
+
+    // The table carries the generated columns; the form the fields.
+    expect(file_get_contents($tableFile))->toContain("Column::make('id')->label('ID')->sortable(),");
+    expect(file_get_contents($tableFile))->toContain("Column::make('title')");
+    expect(file_get_contents($schemaFile))->toContain("TextInput::make('title')");
+    expect(file_get_contents($schemaFile))->toContain("TextInput::make('views')");
     // Foreign-key and timestamp columns are skipped.
-    expect($content)->not->toContain("Column::make('user_id')");
-    expect($content)->not->toContain("Column::make('created_at')");
+    expect(file_get_contents($tableFile))->not->toContain("Column::make('user_id')");
+    expect(file_get_contents($tableFile))->not->toContain("Column::make('created_at')");
 
-    // The generated class is valid PHP and loadable through a manual autoloader.
+    $resourceClass = $namespace.'\\Posts\\PostResource';
+
+    // The generated classes are valid PHP and loadable through the PSR-4
+    // mapping the command's own namespace implies.
     spl_autoload_register(static function (string $class) use ($namespace, $path): void {
         if (str_starts_with($class, $namespace.'\\')) {
             $generated = $path.'/'.Str::after($class, $namespace.'\\').'.php';
@@ -45,13 +57,13 @@ it('generates a resource file with columns and fields from the model table', fun
         }
     });
 
-    $class = $namespace.'\\PostResource';
-    expect(is_subclass_of($class, Resource::class))->toBeTrue();
-    expect($class::getTableId())->toBe('post');
-    expect($class::getFormId())->toBe('post-form');
+    expect(is_subclass_of($resourceClass, Resource::class))->toBeTrue();
+    expect($resourceClass::getTableId())->toBe('post');
+    expect($resourceClass::getFormId())->toBe('post-form');
 
-    unlink($file);
-    rmdir($path);
+    $refilament = new Refilament;
+    $refilament->registerResourcesFromDirectory($path, $namespace);
+    expect($refilament->getResourceClass('post'))->toBe($resourceClass);
 });
 
 it('skips auth columns and emits masked revealable inputs for password columns', function () {
@@ -67,22 +79,21 @@ it('skips auth columns and emits masked revealable inputs for password columns',
         '--generate' => true,
     ])->assertSuccessful();
 
-    $content = file_get_contents($path.'/UserResource.php');
+    $tableContent = file_get_contents($path.'/Users/Tables/UsersTable.php');
+    $schemaContent = file_get_contents($path.'/Users/Schemas/UserForm.php');
 
     // remember_token is auth-system noise — skipped from both table and form.
-    expect($content)->not->toContain('remember_token');
+    expect($tableContent)->not->toContain('remember_token');
+    expect($schemaContent)->not->toContain('remember_token');
 
     // The password column stays in the table but renders as a masked,
     // revealable password input in the form.
-    expect($content)->toContain("Column::make('password')");
-    expect($content)->toContain("TextInput::make('password')");
-    expect($content)->toContain('->password()->revealable()');
-
-    unlink($path.'/UserResource.php');
-    rmdir($path);
+    expect($tableContent)->toContain("Column::make('password')");
+    expect($schemaContent)->toContain("TextInput::make('password')");
+    expect($schemaContent)->toContain('->password()->revealable()');
 });
 
-it('generates a skeleton resource without --generate', function () {
+it('generates the skeleton directory without --generate', function () {
     $path = sys_get_temp_dir().'/refilament-skeleton-'.Str::random(6);
     $namespace = 'Refilament\\Refilament\\Tests\\Generated';
 
@@ -94,12 +105,13 @@ it('generates a skeleton resource without --generate', function () {
         '--model' => Post::class,
     ])->assertSuccessful();
 
-    $file = $path.'/CategoryResource.php';
-    expect(file_exists($file))->toBeTrue();
-    expect(file_get_contents($file))->toContain('TODO: define columns');
+    $resourceFile = $path.'/Categories/CategoryResource.php';
+    $tableFile = $path.'/Categories/Tables/CategoriesTable.php';
+    $schemaFile = $path.'/Categories/Schemas/CategoryForm.php';
 
-    unlink($file);
-    rmdir($path);
+    expect(file_exists($resourceFile))->toBeTrue();
+    expect(file_get_contents($tableFile))->toContain('TODO: define columns');
+    expect(file_get_contents($schemaFile))->toContain('TODO: define fields');
 });
 
 it('refuses to overwrite an existing resource without --force', function () {
@@ -119,7 +131,15 @@ it('refuses to overwrite an existing resource without --force', function () {
         '--model' => Post::class,
     ])->assertExitCode(1);
 
-    unlink($path.'/PostResource.php');
+    // The per-resource directory is non-empty (Schemas/, Tables/), so it must
+    // be removed recursively.
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST,
+    );
+    foreach ($iterator as $file) {
+        $file->isDir() ? rmdir($file->getPathname()) : unlink($file->getPathname());
+    }
     rmdir($path);
 });
 

@@ -23,6 +23,7 @@ it('serializes the panel shell contract for the sidebar', function () {
         'id' => 'refilament',
         'brandName' => 'Refilament',
         'sidebarCollapsible' => false,
+        'topNavigation' => false,
         'dashboardUrl' => '/refilament',
         'groups' => [],
         'items' => [
@@ -34,6 +35,28 @@ it('serializes the panel shell contract for the sidebar', function () {
             ],
         ],
     ]);
+});
+
+it('serializes a brand logo and top-navigation flag in the shell contract', function () {
+    $panel = Panel::make()
+        ->id('refilament')
+        ->brandName('Acme')
+        ->brandLogo('https://example.com/logo.svg')
+        ->topNavigation()
+        ->toArray();
+
+    expect($panel['brandLogo'])->toBe('https://example.com/logo.svg');
+    expect($panel['topNavigation'])->toBeTrue();
+});
+
+it('resolves a closure brand logo at serialization', function () {
+    $panel = Panel::make()->brandLogo(fn (): string => 'https://example.com/logo.svg')->toArray();
+
+    expect($panel['brandLogo'])->toBe('https://example.com/logo.svg');
+});
+
+it('omits brandLogo when unset', function () {
+    expect(Panel::make()->toArray())->not->toHaveKey('brandLogo');
 });
 
 it('buckets navigation items into groups by their group name', function () {
@@ -189,4 +212,33 @@ it('skips custom pages that have not opted into navigation', function () {
     // 'Stats' opts in, 'other' does not — the non-opted page never appears.
     expect($labels)->not->toContain('Other');
     expect($labels)->toContain('Stats');
+});
+
+it('serializes armed render hooks into the shell contract', function () {
+    $panel = Panel::make()
+        ->renderHook('sidebar-footer', 'quick-links')
+        ->renderHook('topbar-end', 'support-menu');
+
+    expect($panel->toArray()['renderHooks'])->toBe([
+        'sidebar-footer' => 'quick-links',
+        'topbar-end' => 'support-menu',
+    ]);
+});
+
+it('omits renderHooks when no hooks are armed', function () {
+    expect(Panel::make()->toArray())->not->toHaveKey('renderHooks');
+});
+
+it('serializes the database-notifications bell contract', function () {
+    $panel = Panel::make()->databaseNotifications()->databaseNotificationsPolling('10s');
+
+    expect($panel->toArray()['notifications'])->toBe(['polling' => '10s']);
+});
+
+it('defaults the bell polling interval to 30s', function () {
+    expect(Panel::make()->databaseNotifications()->toArray()['notifications'])->toBe(['polling' => '30s']);
+});
+
+it('omits the notifications key when the bell is disabled', function () {
+    expect(Panel::make()->toArray())->not->toHaveKey('notifications');
 });

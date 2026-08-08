@@ -78,6 +78,80 @@ it('never validates hidden fields', function () {
     expect($schema->getValidationRules())->toBe(['visible' => ['required']]);
 });
 
+it('never validates dehydrated(false) fields — shown but never submitted', function () {
+    $schema = Schema::make()->components([
+        demoComponentForSchema('visible')->required(),
+        demoComponentForSchema('computed')->required()->dehydrated(false),
+    ]);
+
+    expect($schema->getValidationRules())->toBe(['visible' => ['required']]);
+});
+
+it('serializes readOnly and dehydrated flags on the field node', function () {
+    $node = demoComponentForSchema('total')
+        ->readOnly()
+        ->dehydrated(false)
+        ->toArray();
+
+    expect($node['readOnly'])->toBeTrue();
+    expect($node['dehydrated'])->toBeFalse();
+    expect(array_key_exists('disabled', $node))->toBeFalse();
+
+    // Defaults: a plain field is dehydrated and not read-only — both keys
+    // stay absent from the contract.
+    $plain = demoComponentForSchema('total')->toArray();
+
+    expect(array_key_exists('readOnly', $plain))->toBeFalse();
+    expect(array_key_exists('dehydrated', $plain))->toBeFalse();
+});
+
+it('hides fields for a named operation via hiddenOn()', function () {
+    $document = Schema::make()->components([
+        demoComponentForSchema('slug')->hiddenOn('edit'),
+    ])->toArray('edit');
+
+    expect($document['schema'][0]['hidden'])->toBeTrue();
+});
+
+it('keeps hiddenOn fields visible for other operations', function () {
+    $document = Schema::make()->components([
+        demoComponentForSchema('slug')->hiddenOn('edit'),
+    ])->toArray('create');
+
+    expect(array_key_exists('hidden', $document['schema'][0]))->toBeFalse();
+});
+
+it('disables fields for a named operation via disabledOn()', function () {
+    $document = Schema::make()->components([
+        demoComponentForSchema('code')->disabledOn('edit'),
+    ])->toArray('edit');
+
+    expect($document['schema'][0]['disabled'])->toBeTrue();
+
+    $create = Schema::make()->components([
+        demoComponentForSchema('code')->disabledOn('edit'),
+    ])->toArray('create');
+
+    expect(array_key_exists('disabled', $create['schema'][0]))->toBeFalse();
+});
+
+it('never validates fields hidden for the current operation', function () {
+    $schema = Schema::make()->components([
+        demoComponentForSchema('slug')->required()->hiddenOn('create'),
+    ]);
+
+    expect($schema->getValidationRules('create'))->toBe([]);
+    expect($schema->getValidationRules('edit'))->toBe(['slug' => ['required']]);
+});
+
+it('carries operation-aware rules through layout children', function () {
+    $document = Schema::make()->components([
+        Section::make()->schema([demoComponentForSchema('secret')->hiddenOn('edit')]),
+    ])->toArray('edit');
+
+    expect($document['schema'][0]['schema'][0]['hidden'])->toBeTrue();
+});
+
 it('maps field names to labels for validator attributes', function () {
     $schema = Schema::make()->components([
         demoComponentForSchema('first_name')->label('First Name')->required(),

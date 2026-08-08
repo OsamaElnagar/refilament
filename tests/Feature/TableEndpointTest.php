@@ -18,7 +18,7 @@ it('serves the first page with the table definition', function () {
     $response->assertJsonPath('perPage', 10);
     $response->assertJsonPath('total', 45);
     $response->assertJsonPath('lastPage', 5);
-    $response->assertJsonCount(7, 'columns');
+    $response->assertJsonCount(8, 'columns');
     $response->assertJsonCount(10, 'rows');
     $response->assertJsonStructure([
         'rows' => [
@@ -120,6 +120,56 @@ it('sorts and paginates together', function () {
     );
 });
 
+it('marks a relationship column as sortable and searchable', function () {
+    $columns = $this->getJson('/refilament/table/posts')->json('columns');
+
+    $user = collect($columns)->firstWhere('name', 'user.name');
+
+    expect($user['sortable'])->toBeTrue();
+    expect($user['searchable'])->toBeTrue();
+});
+
+it('sorts rows by a relationship (dot-notation) column', function () {
+    // Give users deliberately ordered names so the related column has a clear
+    // expected ordering to assert against.
+    $names = ['Zane', 'Ada', 'Mira'];
+    $users = collect($names)->map(fn (string $name) => \Workbench\App\Models\User::factory()->create(['name' => $name]));
+
+    Post::query()->delete();
+$users->each(fn ($user, $index): mixed => Post::create([
+        'user_id' => $user->id,
+        'title' => "Post {$index}",
+        'author' => 'A',
+        'status' => 'draft',
+        'views' => $index,
+    ]));
+
+    $response = $this->getJson('/refilament/table/posts?sort=user.name&direction=asc&perPage=10');
+
+    $response->assertOk();
+    expect($response->json('rows.0')['user.name'])->toBe('Ada');
+    expect($response->json('rows.2')['user.name'])->toBe('Zane');
+
+    $desc = $this->getJson('/refilament/table/posts?sort=user.name&direction=desc&perPage=10');
+
+    $desc->assertOk();
+    expect($desc->json('rows.0')['user.name'])->toBe('Zane');
+});
+
+it('searches rows by a relationship (dot-notation) column', function () {
+    $needle = 'UniqueOwner';
+
+    $user = \Workbench\App\Models\User::factory()->create(['name' => "{$needle}Name"]);
+
+    Post::factory()->create(['user_id' => $user->id, 'author' => 'A', 'status' => 'draft']);
+
+$response = $this->getJson('/refilament/table/posts?search='.$needle);
+
+    $response->assertOk();
+    expect($response->json('rows'))->not->toBeEmpty();
+    expect($response->json('rows.0')['user.name'])->toBe("{$needle}Name");
+});
+
 it('marks searchable columns in the definition', function () {
     $columns = $this->getJson('/refilament/table/posts')->json('columns');
 
@@ -154,6 +204,29 @@ it('resolves the related user attribute in every row', function () {
     expect($row['user.name'])->toBeString()->not->toBeEmpty();
 });
 
+it('marks the badge column in the definition', function () {
+    $status = collect($this->getJson('/refilament/table/posts')->json('columns'))
+        ->firstWhere('name', 'status');
+
+    expect($status['badge'])->toBeTrue();
+});
+
+it('ships status cells as structured badge objects on the wire', function () {
+    $row = $this->getJson('/refilament/table/posts')->json('rows.0');
+
+    expect($row['status'])->toBeArray();
+    expect($row['status']['badge'] ?? null)->toBeTrue();
+    expect($row['status'])->toHaveKey('value')->not->toBeEmpty();
+    // The per-record color resolver maps draft/published/archived to a color.
+    expect($row['status'])->toHaveKey('color');
+});
+
+it('formats published_at as a pre-formatted date string', function () {
+    $row = $this->getJson('/refilament/table/posts')->json('rows.0');
+
+    expect($row['published_at'])->toBeString()->not->toBeEmpty();
+});
+
 it('serializes the filters in the definition', function () {
     $filters = $this->getJson('/refilament/table/posts')->json('filters');
 
@@ -180,9 +253,9 @@ it('serializes the filters in the definition', function () {
             'label' => 'Trashed',
             'type' => 'trashed',
             'options' => [
-                ['value' => '', 'label' => 'Without trashed'],
-                ['value' => 'with', 'label' => 'With trashed'],
-                ['value' => 'only', 'label' => 'Only trashed'],
+                ['value' => '', 'label' => 'Without deleted records'],
+                ['value' => 'with', 'label' => 'With deleted records'],
+                ['value' => 'only', 'label' => 'Only deleted records'],
             ],
         ],
     ]);
@@ -540,3 +613,4 @@ it('validates the query parameters', function () {
     $this->getJson('/refilament/table/posts?page=0')->assertStatus(422);
     $this->getJson('/refilament/table/posts?perPage=0')->assertStatus(422);
 });
+

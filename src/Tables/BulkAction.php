@@ -5,10 +5,17 @@ declare(strict_types=1);
 namespace Refilament\Refilament\Tables;
 
 use Closure;
+use Illuminate\Auth\Access\Response as AuthResponse;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Traits\Macroable;
 use LogicException;
 use Refilament\Refilament\Notifications\Notification;
+use Refilament\Refilament\Refilament;
+use Refilament\Refilament\Support\Concerns\CanBeConfigured;
+use Refilament\Refilament\Tables\Concerns\CanBeAuthorized;
+use UnitEnum;
 
 /**
  * Toolbar (bulk) action (slice 2.2).
@@ -19,10 +26,22 @@ use Refilament\Refilament\Notifications\Notification;
  * survives serialization — the table resolver rebuilds it server-side when a
  * request arrives, and it receives the whole set of selected records as an
  * Eloquent Collection, never a single record.
+ *
+ * Policy-backed authorization (slice 4.1) ships on the shared
+ * CanBeAuthorized trait, exactly like row actions — `authorize()` /
+ * `authorizeAny()` declare abilities the current panel user must pass before
+ * the bulk action renders or runs (permissive default: no policy → allowed).
+ * Per-record checks use `authorizeIndividualRecords()` below.
  */
 class BulkAction
 {
+    use CanBeAuthorized;
+    use CanBeConfigured;
+    use Macroable;
+
     protected ?string $label = null;
+
+    protected bool $shouldTranslateLabel = false;
 
     protected ?string $color = null;
 
@@ -31,11 +50,26 @@ class BulkAction
     /** @var Closure(EloquentCollection<int, Model>): mixed|null */
     protected ?Closure $action = null;
 
+    /**
+     * Per-record, policy-backed authorization for bulk actions (slice 4.1 —
+     * mirrors Filament's `BulkAction::authorizeIndividualRecords()`). When set,
+     * each selected record is checked against the record's model policy before
+     * the `action()` closure runs; records the current user cannot act on are
+     * filtered out of the collection the closure receives. Null (or false)
+     * means no per-record check — the bulk action acts on whatever is selected.
+     *
+     * @var bool|string|UnitEnum|Closure(Model): mixed|null
+     */
+    protected bool|string|UnitEnum|Closure|null $authorizeIndividualRecords = null;
+
     protected ?string $successMessage = null;
 
     protected ?Notification $successNotification = null;
 
-    final public function __construct(protected ?string $name = null) {}
+    final public function __construct(protected ?string $name = null)
+    {
+        $this->configure();
+    }
 
     public static function make(?string $name = null): static
     {
@@ -50,6 +84,18 @@ class BulkAction
     public function label(?string $label): static
     {
         $this->label = $label;
+
+        return $this;
+    }
+
+    /**
+     * Treat the bulk action label as a translation key resolved through the
+     * app's translator when the action is serialized. Mirrors Filament's
+     * `translateLabel()`; off by default so labels pass through verbatim.
+     */
+    public function translateLabel(bool $condition = true): static
+    {
+        $this->shouldTranslateLabel = $condition;
 
         return $this;
     }
@@ -85,6 +131,90 @@ class BulkAction
         return $this;
     }
 
+    /**
+     * Authorize each selected record against its model policy before the bulk
+     * action runs (slice 4.1 — mirrors Filament's
+     * `BulkAction::authorizeIndividualRecords()`). Pass a policy ability name
+     * (checked per record), a UnitEnum ability, a closure returning a bool or
+     * Response, or `true` with a closure supplied later. Records the current
+     * user cannot act on are filtered out of the collection handed to
+     * `action()`.
+     */
+    public function authorizeIndividualRecords(bool|string|UnitEnum|Closure|null $callback = true): static
+    {
+        $this->authorizeIndividualRecords = $callback;
+
+        return $this;
+    }
+
+    public function shouldAuthorizeIndividualRecords(): bool
+    {
+        return filled($this->authorizeIndividualRecords) && ($this->authorizeIndividualRecords !== false);
+    }
+
+    /**
+     * The authorization decision for one selected record (slice 4.1). A string
+     * or UnitEnum declares a policy ability inspected for the current panel
+     * user against the record; a closure is evaluated with the record and
+     * coerced to a Response.
+     */
+    public function getIndividualRecordAuthorizationResponse(Model $record): AuthResponse
+    {
+        $callback = $this->authorizeIndividualRecords;
+
+        if (is_string($callback) || $callback instanceof UnitEnum) {
+            $ability = $callback instanceof UnitEnum ? $callback->name : $callback;
+
+            $user = app(Refilament::class)->authorizationUser();
+
+            // Permissive default, mirroring Resource::getAuthorizationResponse
+            // and CanBeAuthorized: an ability the record's model policy does
+            // not declare is allowed, so a bulk action declaring one never
+            // locks records out on a fresh install with no policies.
+            $policy = Gate::getPolicyFor($record);
+
+            if ($policy === null || ! method_exists($policy, $ability)) {
+                return AuthResponse::allow();
+            }
+
+            return Gate::forUser($user)->inspect($ability, [$record]);
+        }
+
+        if ($callback instanceof Closure) {
+            $resolved = $callback($record);
+
+            if ($resolved instanceof AuthResponse) {
+                return $resolved;
+            }
+
+            return $resolved ? AuthResponse::allow() : AuthResponse::deny();
+        }
+
+        throw new LogicException(
+            "Bulk action [{$this->name}] has no [authorizeIndividualRecords()] resolver — pass an ability name or a closure.",
+        );
+    }
+
+    /**
+     * Filter the selected records down to those the current user is authorized
+     * to act on (slice 4.1). With no per-record authorization set the set is
+     * returned unchanged; otherwise unauthorized records are removed before the
+     * `action()` closure runs.
+     *
+     * @param  EloquentCollection<int, Model>  $records
+     * @return EloquentCollection<int, Model>
+     */
+    public function filterRecords(EloquentCollection $records): EloquentCollection
+    {
+        if (! $this->shouldAuthorizeIndividualRecords()) {
+            return $records;
+        }
+
+        return $records->filter(
+            fn (Model $record): bool => $this->getIndividualRecordAuthorizationResponse($record)->allowed(),
+        );
+    }
+
     public function successMessage(string $successMessage): static
     {
         $this->successMessage = $successMessage;
@@ -110,7 +240,9 @@ class BulkAction
 
     public function getLabel(): string
     {
-        return $this->label ?? ucfirst((string) $this->name);
+        $label = $this->label ?? ucfirst((string) $this->name);
+
+        return $this->shouldTranslateLabel ? __($label) : $label;
     }
 
     public function getColor(): ?string

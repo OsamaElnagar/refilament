@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Refilament\Refilament\Schemas\Components\Component;
+use Refilament\Refilament\Tables\Action;
 
 function demoTextInput(?string $name = null): Component
 {
@@ -113,4 +114,45 @@ it('exposes config getters', function () {
     expect($component->getLabel())->toBe('Title');
     expect($component->isDisabled())->toBeTrue();
     expect($component->isVisible())->toBeTrue();
+});
+
+it('serializes hint text, a hint icon and hint actions into the label row', function () {
+    $node = demoTextInput('author')
+        ->hint('Pick a real person')
+        ->hintIcon('chart-bar', 'Shown as a badge in the table')
+        ->hintActions([
+            Action::make('view-authors')
+                ->label('View authors')
+                ->icon('document')
+                ->tooltip('Open the users page in a new tab')
+                ->url('/refilament/users')
+                ->openUrlInNewTab()
+                ->visibleWhenFilled('author'),
+        ])
+        ->toArray();
+
+    expect($node['hint'])->toBe('Pick a real person');
+    expect($node['hintIcon'])->toBe([
+        'icon' => 'chart-bar',
+        'tooltip' => 'Shown as a badge in the table',
+    ]);
+    expect($node['hintActions'])->toBe([
+        [
+            'name' => 'view-authors',
+            'label' => 'View authors',
+            'url' => '/refilament/users',
+            'openUrlInNewTab' => true,
+            'visibleWhenFilled' => ['author'],
+            'icon' => 'document',
+            'tooltip' => 'Open the users page in a new tab',
+        ],
+    ]);
+});
+
+it('omits the hint keys when unset', function () {
+    $node = demoTextInput('title')->toArray();
+
+    expect($node)->not->toHaveKey('hint');
+    expect($node)->not->toHaveKey('hintIcon');
+    expect($node)->not->toHaveKey('hintActions');
 });

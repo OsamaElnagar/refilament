@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Refilament\Refilament\Pages;
 
 use Illuminate\Support\Str;
+use Refilament\Refilament\Refilament;
 
 /**
  * Base page (slice 1.6 — docs/ROADMAP.md "1.6 Page system").
@@ -13,19 +14,13 @@ use Illuminate\Support\Str;
  * pages (the built-in list/create/edit/view plus custom pages) extend
  * Resources\Pages\Page, which adds the resource linkage and the route()
  * registration factory; standalone pages extend this base and are wired by
- * the app (the slice 1.9 panel shell will register them like Filament's
- * ->pages([...])). Mirrors Filament's Page surface where it is pure data —
- * navigation metadata feeds the panel shell later, never the page payload.
+ * the panel shell (slice 1.9 ->pages([...])) — those register their route via
+ * getRoutePath()/getInertiaComponent() and are served by the single
+ * PanelPageController. Mirrors Filament's Page surface where it is pure data —
+ * navigation metadata feeds the panel shell, never the page payload.
  */
 abstract class Page
 {
-    /**
-     * The route path this page serves under, relative to its resource for
-     * resource pages. Informational in v1 — built-in pages derive their
-     * route from the getPages() registration.
-     */
-    protected static string $routePath = '/';
-
     protected static ?string $title = null;
 
     protected static ?string $navigationLabel = null;
@@ -37,6 +32,14 @@ abstract class Page
     protected static ?string $navigationGroup = null;
 
     /**
+     * The URL path this page registers under, relative to its resource segment
+     * (resource pages) or the panel root (standalone pages). Resource pages'
+     * route() factory uses it; standalone panel pages are served at their
+     * getSlug() instead, so this defaults empty.
+     */
+    protected static string $routePath = '';
+
+    /**
      * Whether this page appears in the panel sidebar. Only pages that opt in
      * (and are not a built-in resource page already surfaced by their
      * resource's nav item) register a nav entry — mirroring Filament, where
@@ -44,13 +47,6 @@ abstract class Page
      * false; custom pages set it to true to surface themselves.
      */
     protected static bool $shouldRegisterNavigation = false;
-
-    protected static bool $isDiscovered = true;
-
-    public static function getRoutePath(): string
-    {
-        return static::$routePath;
-    }
 
     public static function getTitle(): string
     {
@@ -79,14 +75,40 @@ abstract class Page
         return static::$navigationGroup;
     }
 
+    public static function getRoutePath(): string
+    {
+        return static::$routePath;
+    }
+
     public static function shouldRegisterNavigation(): bool
     {
         return static::$shouldRegisterNavigation;
     }
 
-    public static function isDiscovered(): bool
+    /**
+     * The URL slug for this standalone panel page (slice 1.9 ->pages()),
+     * relative to the panel root. Defaults to the kebab-cased plural of the
+     * class basename, mirroring Filament's `getDefaultSlug()`, e.g. an
+     * `AboutPage` class serves `/refilament/about-page`. The panel reads it
+     * when auto-registering the page's route and its sidebar item.
+     */
+    public static function getSlug(): string
     {
-        return static::$isDiscovered;
+        return (string) Str::slug(Str::kebab(class_basename(static::class)));
+    }
+
+    /**
+     * The Inertia props for this standalone page (slice 1.9 ->pages()),
+     * computed server-side per request. Standalone pages override this to add
+     * their own data. Named distinctly from the resource pages' getViewData()
+     * so the two page families can coexist on this shared base — the panel
+     * page controller renders getInertiaComponent() with these props.
+     *
+     * @return array<string, mixed>
+     */
+    public static function getPanelViewData(Refilament $refilament): array
+    {
+        return [];
     }
 
     /**

@@ -72,7 +72,9 @@ it('serves the posts schema document through the typed document endpoint', funct
         'title' => null,
         'slug' => null,
         'author' => null,
+        'user_id' => null,
         'status' => 'draft',
+        'created_at' => null,
     ]);
     $response->assertJsonPath('errors', []);
 });

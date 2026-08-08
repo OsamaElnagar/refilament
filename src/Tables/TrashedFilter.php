@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Refilament\Refilament\Tables;
 
+use Illuminate\Support\Traits\Macroable;
+use Refilament\Refilament\Support\Concerns\CanBeConfigured;
+
 /**
  * Soft-delete filter (slice 2.2).
  *
@@ -16,11 +19,19 @@ namespace Refilament\Refilament\Tables;
  */
 class TrashedFilter
 {
+    use CanBeConfigured;
+    use Macroable;
+
     protected ?string $label = null;
+
+    protected bool $shouldTranslateLabel = false;
 
     protected ?string $placeholder = null;
 
-    final public function __construct(protected ?string $name = null) {}
+    final public function __construct(protected ?string $name = null)
+    {
+        $this->configure();
+    }
 
     public static function make(?string $name = null): static
     {
@@ -39,6 +50,18 @@ class TrashedFilter
         return $this;
     }
 
+    /**
+     * Treat the filter label as a translation key resolved through the app's
+     * translator when the filter is serialized. Mirrors Filament's
+     * `translateLabel()`; off by default so labels pass through verbatim.
+     */
+    public function translateLabel(bool $condition = true): static
+    {
+        $this->shouldTranslateLabel = $condition;
+
+        return $this;
+    }
+
     public function placeholder(?string $placeholder): static
     {
         $this->placeholder = $placeholder;
@@ -53,7 +76,9 @@ class TrashedFilter
 
     public function getLabel(): string
     {
-        return $this->label ?? (string) $this->name;
+        $label = $this->label ?? (string) $this->name;
+
+        return $this->shouldTranslateLabel ? __($label) : $label;
     }
 
     public function getPlaceholder(): ?string
@@ -73,9 +98,9 @@ class TrashedFilter
             'label' => $this->getLabel(),
             'type' => 'trashed',
             'options' => [
-                ['value' => '', 'label' => $this->placeholder ?? 'Without trashed'],
-                ['value' => 'with', 'label' => 'With trashed'],
-                ['value' => 'only', 'label' => 'Only trashed'],
+                ['value' => '', 'label' => $this->placeholder ?? __('refilament::tables.filters.trashed.without_trashed')],
+                ['value' => 'with', 'label' => __('refilament::tables.filters.trashed.with_trashed')],
+                ['value' => 'only', 'label' => __('refilament::tables.filters.trashed.only_trashed')],
             ],
         ];
 

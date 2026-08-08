@@ -16,6 +16,8 @@ class NavigationGroup
 {
     protected string $label;
 
+    protected bool $shouldTranslateLabel = false;
+
     protected ?string $icon = null;
 
     protected bool $collapsible = false;
@@ -40,6 +42,18 @@ class NavigationGroup
     public function label(string $label): static
     {
         $this->label = $label;
+
+        return $this;
+    }
+
+    /**
+     * Treat the group label as a translation key resolved through the app's
+     * translator when the navigation group is serialized. Mirrors Filament's
+     * `translateLabel()`; off by default so labels pass through verbatim.
+     */
+    public function translateLabel(bool $condition = true): static
+    {
+        $this->shouldTranslateLabel = $condition;
 
         return $this;
     }
@@ -78,7 +92,7 @@ class NavigationGroup
 
     public function getLabel(): string
     {
-        return $this->label;
+        return $this->shouldTranslateLabel ? __($this->label) : $this->label;
     }
 
     public function getIcon(): ?string

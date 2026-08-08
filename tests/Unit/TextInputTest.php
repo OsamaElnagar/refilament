@@ -96,3 +96,23 @@ it('follows Filament input type precedence', function () {
 it('uses the default tel regex when none is configured', function () {
     expect(TextInput::make('phone')->getTelRegex())->toContain('^[+]*');
 });
+
+it('serializes a computed expression as data', function () {
+    $node = TextInput::make('total')
+        ->numeric()
+        ->readOnly()
+        ->computed('quantity * unit_price')
+        ->toArray();
+
+    expect($node['computed'])->toBe('quantity * unit_price');
+    expect($node['readOnly'])->toBeTrue();
+    expect($node['inputType'])->toBe('number');
+});
+
+it('omits the computed key when unset', function () {
+    expect(TextInput::make('total')->toArray())->not->toHaveKey('computed');
+});
+
+it('rejects an empty computed expression', function () {
+    expect(fn () => TextInput::make('total')->computed('   '))->toThrow(LogicException::class);
+});

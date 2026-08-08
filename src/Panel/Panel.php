@@ -4,10 +4,15 @@ declare(strict_types=1);
 
 namespace Refilament\Refilament\Panel;
 
+use Closure;
+use Illuminate\Filesystem\Filesystem;
+use LogicException;
 use Refilament\Refilament\Navigation\NavigationGroup;
 use Refilament\Refilament\Navigation\NavigationItem;
+use Refilament\Refilament\Pages\Page;
 use Refilament\Refilament\Resources\Resource;
 use Refilament\Refilament\Widgets\Widget;
+use ReflectionClass;
 
 /**
  * The package's single panel config (slice 1.9 — docs/ROADMAP.md "1.9 Panel
@@ -32,7 +37,22 @@ class Panel
 
     protected string $brandName = 'Refilament';
 
+    /**
+     * A brand logo beside the brand name — a URL, or a closure resolving to
+     * one (mirrors Heaven's closure `brandLogo()`, minus the Htmlable). The
+     * React shell renders it as the sidebar / top-nav mark.
+     *
+     * @var string|Closure(): string|null
+     */
+    protected mixed $brandLogo = null;
+
     protected bool $sidebarCollapsible = false;
+
+    /**
+     * Render the navigation in a top bar instead of the sidebar (mirrors
+     * Filament's `topNavigation()`), driven by the shell contract.
+     */
+    protected bool $topNavigation = false;
 
     /**
      * @var array<int, class-string<resource>>
@@ -58,11 +78,49 @@ class Panel
     protected array $colors = [];
 
     /**
+     * Extension points where the shell renders consumer-provided UI (slice
+     * B1) — mirrors Filament's `renderHook(PanelsRenderHook::...)`, translated
+     * for a React shell. Each entry names a shell slot
+     * ('sidebar-footer' | 'topbar-end' | 'page-start') and a client-side
+     * component key the app maps to a React component (registered with
+     * `registerShellSlot`). Declaring a hook here is what arms it: the shell
+     * only renders slots the server has enabled.
+     *
+     * @var array<string, string>
+     */
+    protected array $renderHooks = [];
+
+    /**
      * @var array<int, class-string<Widget>>
      */
     protected array $widgets = [];
 
+    /**
+     * Standalone panel pages — slices of behavior not tied to a resource,
+     * e.g. a settings or about page — that belong to this panel
+     * (docs/ROADMAP.md, "1.9 ->pages([...])"). They extend Pages\Page and
+     * are served by the shared PanelPageController route; opt-in pages that
+     * set shouldRegisterNavigation() also surface in the sidebar.
+     *
+     * @var array<int, class-string<Page>>
+     */
+    protected array $pages = [];
+
     protected string $dashboardUrl = '/refilament';
+
+    /**
+     * Whether the shell renders the database-notifications bell (slice B3),
+     * mirroring Filament's `Panel::databaseNotifications()`. The bell polls
+     * the typed notifications endpoint for the unread count and latest rows,
+     * and marks notifications read as the user dismisses them.
+     */
+    protected bool $databaseNotifications = false;
+
+    /**
+     * The bell's polling interval, Filament's '7s' / '150s' style. Defaults to
+     * '30s' when notifications are enabled without an explicit interval.
+     */
+    protected ?string $notificationsPolling = null;
 
     /**
      * The auth guard the panel's access gate checks (slice 1.9 "auth gate").
@@ -111,6 +169,45 @@ class Panel
         $this->brandName = $brandName;
 
         return $this;
+    }
+
+    /**
+     * A brand logo rendered beside the brand name. Accepts a URL string or a
+     * closure resolving to one (evaluated at serialization, never shipped).
+     *
+     * @param  string|Closure(): string|null  $logo
+     */
+    public function brandLogo(string|Closure|null $logo): static
+    {
+        $this->brandLogo = $logo;
+
+        return $this;
+    }
+
+    public function getBrandLogo(): ?string
+    {
+        $logo = $this->brandLogo;
+
+        if ($logo instanceof Closure) {
+            $logo = $logo();
+        }
+
+        return is_string($logo) ? $logo : null;
+    }
+
+    /**
+     * Render the navigation in a top bar instead of the sidebar.
+     */
+    public function topNavigation(bool $condition = true): static
+    {
+        $this->topNavigation = $condition;
+
+        return $this;
+    }
+
+    public function isTopNavigation(): bool
+    {
+        return $this->topNavigation;
     }
 
     /**
@@ -164,6 +261,26 @@ class Panel
     }
 
     /**
+     * Arm a shell render hook (slice B1): the named slot renders the given
+     * client-side component key wherever the shell places it. Mirrors
+     * Filament's `renderHook(PanelsRenderHook::SIDEBAR_FOOTER, ...)`.
+     */
+    public function renderHook(string $slot, string $component): static
+    {
+        $this->renderHooks[$slot] = $component;
+
+        return $this;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function getRenderHooks(): array
+    {
+        return $this->renderHooks;
+    }
+
+    /**
      * @param  array<int, class-string<Widget>>  $widgets
      */
     public function widgets(array $widgets): static
@@ -171,6 +288,77 @@ class Panel
         $this->widgets = $widgets;
 
         return $this;
+    }
+
+    /**
+     * Explicitly register standalone panel pages (slice 1.9 "->pages([...])"),
+     * mirroring Filament's `Panel::pages()`. Pages are appended to any already
+     * registered, deduplicated in getPages().
+     *
+     * @param  array<int, class-string<Page>>  $pages
+     */
+    public function pages(array $pages): static
+    {
+        foreach ($pages as $page) {
+            if ($page::getSlug() === '') {
+                throw new LogicException("Page [{$page}] must resolve a non-empty slug.");
+            }
+
+            $this->pages[] = $page;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Auto-discover standalone panel pages in a directory (slice 1.9),
+     * mirroring Filament's `Panel::discoverPages($in, $for)`. Every non-abstract
+     * class in `$in` that extends Pages\Page is registered. No-op when the
+     * directory doesn't exist, so a documented but not-yet-created folder is
+     * not an error.
+     */
+    public function discoverPages(string $in, string $for): static
+    {
+        if (! is_dir($in)) {
+            return $this;
+        }
+
+        $filesystem = app(Filesystem::class);
+
+        $known = array_flip($this->pages);
+
+        foreach ($filesystem->allFiles($in) as $file) {
+            $class = $for.'\\'.str_replace(
+                [DIRECTORY_SEPARATOR, '.php'],
+                ['\\', ''],
+                $file->getRelativePathname(),
+            );
+
+            if (isset($known[$class]) || ! class_exists($class)) {
+                continue;
+            }
+
+            if ((new ReflectionClass($class))->isAbstract()) {
+                continue;
+            }
+
+            if (! is_subclass_of($class, Page::class)) {
+                continue;
+            }
+
+            $this->pages[] = $class;
+            $known[$class] = true;
+        }
+
+        return $this;
+    }
+
+    /**
+     * @return array<int, class-string<Page>>
+     */
+    public function getPages(): array
+    {
+        return array_values(array_unique($this->pages));
     }
 
     public function dashboardUrl(string $url): static
@@ -202,6 +390,39 @@ class Panel
         $this->authMiddleware = $middleware;
 
         return $this;
+    }
+
+    /**
+     * Enable the shell's database-notifications bell (slice B3) — mirrors
+     * Filament's `Panel::databaseNotifications()`. The bell reads the
+     * authenticated user's notifications through the typed endpoint.
+     */
+    public function databaseNotifications(bool $condition = true): static
+    {
+        $this->databaseNotifications = $condition;
+
+        return $this;
+    }
+
+    /**
+     * The bell's polling interval, in Filament's '7s' / '150s' style. Falls
+     * back to '30s' when unset (Filament's default).
+     */
+    public function databaseNotificationsPolling(?string $interval): static
+    {
+        $this->notificationsPolling = $interval;
+
+        return $this;
+    }
+
+    public function hasDatabaseNotifications(): bool
+    {
+        return $this->databaseNotifications;
+    }
+
+    public function getNotificationsPolling(): ?string
+    {
+        return $this->notificationsPolling;
     }
 
     public function getId(): string
@@ -269,7 +490,11 @@ class Panel
      */
     public function toArray(): array
     {
-        $items = array_merge($this->resourceNavigationItems(), $this->navigationItems);
+        $items = array_merge(
+            $this->resourceNavigationItems(),
+            $this->panelPageNavigationItems(),
+            $this->navigationItems,
+        );
 
         /** @var array<string, NavigationGroup> $groups */
         $groups = [];
@@ -313,12 +538,18 @@ class Panel
         usort($groupData, static fn (array $a, array $b): int => $a['label'] <=> $b['label']);
         usort($ungrouped, static fn (NavigationItem $a, NavigationItem $b): int => $a->getSort() <=> $b->getSort());
 
+        $brandLogo = $this->getBrandLogo();
+
         return [
             'id' => $this->id,
             'brandName' => $this->brandName,
+            ...($brandLogo !== null ? ['brandLogo' => $brandLogo] : []),
             'sidebarCollapsible' => $this->sidebarCollapsible,
+            'topNavigation' => $this->topNavigation,
             'dashboardUrl' => $this->dashboardUrl,
             ...($this->colors !== [] ? ['colors' => $this->colors] : []),
+            ...($this->renderHooks !== [] ? ['renderHooks' => $this->renderHooks] : []),
+            ...($this->databaseNotifications ? ['notifications' => ['polling' => $this->notificationsPolling ?? '30s']] : []),
             'groups' => $groupData,
             'items' => array_map(
                 static fn (NavigationItem $item): array => $item->toArray(),
@@ -343,6 +574,14 @@ class Panel
 
         foreach ($this->resources as $resource) {
             if (! $resource::shouldRegisterNavigation()) {
+                continue;
+            }
+
+            // A resource the current user cannot access (slice 4.1) is hidden
+            // from the sidebar — same as Filament, whose nav reflects per-user
+            // policy. With no policy the default allows access, so a fresh
+            // install lists everything.
+            if (! $resource::canAccess()) {
                 continue;
             }
 
@@ -374,6 +613,35 @@ class Panel
                     ->sort($page::getNavigationSort())
                     ->icon($page::getNavigationIcon() ?? $resource::getNavigationIcon());
             }
+        }
+
+        return $items;
+    }
+
+    /**
+     * One navigation item per opt-in standalone panel page (slice 1.9
+     * "->pages([...])"). A page surfaces in the sidebar only when its
+     * shouldRegisterNavigation() is true (the default is false, mirroring
+     * Filament, where most pages don't appear). Its URL is the shared
+     * page route under the panel's slug.
+     *
+     * @return array<int, NavigationItem>
+     */
+    protected function panelPageNavigationItems(): array
+    {
+        $items = [];
+
+        foreach ($this->getPages() as $page) {
+            if (! $page::shouldRegisterNavigation()) {
+                continue;
+            }
+
+            $items[] = NavigationItem::make($page::getNavigationLabel())
+                ->key($page)
+                ->url('/refilament/'.$page::getSlug())
+                ->group($page::getNavigationGroup())
+                ->sort($page::getNavigationSort())
+                ->icon($page::getNavigationIcon());
         }
 
         return $items;

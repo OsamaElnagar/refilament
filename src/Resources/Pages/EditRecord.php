@@ -43,6 +43,8 @@ class EditRecord extends Page
 
         $model = static::getRecordRouteBindingEloquentQuery($resource)->findOrFail((string) $record);
 
+        static::authorizeEdit($resource, $model);
+
         $data = [];
 
         foreach ($schema->getComponentsRecursively() as $component) {
@@ -73,7 +75,9 @@ class EditRecord extends Page
         }
 
         return [
-            ...$schema->toArray(),
+            // Serialized for the edit operation so `hiddenOn('edit')` /
+            // `disabledOn('edit')` fields render accordingly (slice C6).
+            ...$schema->toArray('edit'),
             'data' => $data,
             'errors' => [],
             'record' => $model->getKey(),

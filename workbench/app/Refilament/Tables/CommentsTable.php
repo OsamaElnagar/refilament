@@ -42,10 +42,15 @@ class CommentsTable
             // the linked comment form; submit creates the comment as a record of
             // the owner post (the relation sets the foreign key).
             ->headerActions([
+                // Policy-backed authorization (slice 4.1): the header create
+                // action declares the meta-ability `create` against the
+                // Comment model class. Permissive default keeps it available on
+                // a fresh install with no policies.
                 Action::make('create')
                     ->label('Add comment')
                     ->type('create')
                     ->schema('comment-form')
+                    ->authorize('create', Comment::class)
                     ->successMessage('Comment added.'),
             ])
             ->actions([

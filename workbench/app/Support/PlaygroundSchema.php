@@ -22,7 +22,7 @@ final class PlaygroundSchema
     /**
      * Demo field values, keyed by field name (docs/CONTRACT.md).
      *
-     * @return array<string, int|string>
+     * @return array<string, int|string|null>
      */
     public static function data(): array
     {
@@ -48,6 +48,12 @@ final class PlaygroundSchema
             'website' => '',
             'plan_frequency' => 'monthly',
             'plan_tier' => 'pro',
+
+            'quantity' => 2,
+            'unit_price' => 49.99,
+            'subtotal' => null,
+            'vat_amount' => null,
+            'total_amount' => null,
         ];
     }
 
@@ -263,6 +269,58 @@ final class PlaygroundSchema
                                             ->default('pro'),
                                     ]),
                             ]),
+                    ]),
+
+                Section::make()
+                    ->heading('Invoice arithmetic')
+                    ->description('Computed fields — live client-side totals, no round trip (slice C3)')
+                    ->schema([
+                        Grid::make()->columns(2)->schema([
+                            TextInput::make('quantity')
+                                ->label('Quantity')
+                                ->numeric()
+                                ->minValue(0)
+                                ->default(2)
+                                ->helperText('Editable — drives the computed fields'),
+
+                            TextInput::make('unit_price')
+                                ->label('Unit price')
+                                ->numeric()
+                                ->minValue(0)
+                                ->step(0.01)
+                                ->default(49.99)
+                                ->helperText('Editable — drives the computed fields'),
+
+                            TextInput::make('subtotal')
+                                ->label('Subtotal')
+                                ->numeric()
+                                ->readOnly()
+                                ->placeholder('—')
+                                // Computed fields (slice C3): the Ahram
+                                // `->numeric()->readOnly()->dehydrated()`
+                                // idiom without the Livewire machinery — the
+                                // expression is serialized as data and
+                                // evaluated client-side as you type.
+                                ->computed('quantity * unit_price')
+                                ->validation(['numeric', 'nullable']),
+
+                            TextInput::make('vat_amount')
+                                ->label('VAT (14%)')
+                                ->numeric()
+                                ->readOnly()
+                                ->placeholder('—')
+                                ->computed('subtotal * 0.14')
+                                ->validation(['numeric', 'nullable']),
+
+                            TextInput::make('total_amount')
+                                ->label('Total')
+                                ->numeric()
+                                ->readOnly()
+                                ->placeholder('—')
+                                ->computed('subtotal + vat_amount')
+                                ->validation(['numeric', 'nullable'])
+                                ->columnSpan(2),
+                        ]),
                     ]),
             ]);
     }

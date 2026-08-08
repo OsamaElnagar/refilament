@@ -46,13 +46,13 @@ class Section extends Layout
         return $this->description;
     }
 
-    public function toArray(): array
+    public function toArray(?string $operation = null): array
     {
         return $this->filterNullValues([
             'type' => $this->getType(),
             'heading' => $this->getHeading(),
             'description' => $this->getDescription(),
-            'schema' => $this->serializeChildren(),
+            'schema' => $this->serializeChildren($operation),
         ]);
     }
 }

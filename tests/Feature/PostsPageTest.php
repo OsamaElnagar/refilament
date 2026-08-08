@@ -14,7 +14,7 @@ it('serves the posts page as an Inertia page with the initial payload', function
     $response->assertJsonPath('props.id', 'posts');
     $response->assertJsonPath('props.heading', 'Posts');
     $response->assertJsonPath('props.resourceTitle', 'Post');
-    $response->assertJsonCount(7, 'props.columns');
+    $response->assertJsonCount(8, 'props.columns');
     $response->assertJsonCount(10, 'props.rows');
     $response->assertJsonPath('props.page', 1);
     $response->assertJsonPath('props.perPage', 10);

@@ -64,12 +64,12 @@ class Tabs extends Layout
         return $this->childComponents;
     }
 
-    public function toArray(): array
+    public function toArray(?string $operation = null): array
     {
         return $this->filterNullValues([
             'type' => $this->getType(),
             'activeTab' => $this->activeTab > 1 ? $this->activeTab : null,
-            'schema' => $this->serializeChildren(),
+            'schema' => $this->serializeChildren($operation),
         ]);
     }
 }

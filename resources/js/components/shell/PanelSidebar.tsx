@@ -3,9 +3,11 @@ import { BarChart3, ChevronDown, CircleDashed, Droplet, FileStack, GalleryVertic
 import { useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
+import { ShellSlot } from '@/components/shell/ShellSlots';
 import {
     Sidebar,
     SidebarContent,
+    SidebarFooter,
     SidebarGroup,
     SidebarGroupContent,
     SidebarGroupLabel,
@@ -20,9 +22,23 @@ import { cn } from '@/lib/utils';
 export interface PanelConfig {
     id: string;
     brandName: string;
+    /** A brand-logo URL (slice B2) rendered beside the brand name. */
+    brandLogo?: string;
     sidebarCollapsible: boolean;
+    /** Render the navigation in a top bar instead of the sidebar (slice B2). */
+    topNavigation?: boolean;
     dashboardUrl: string;
     colors?: Record<string, string>;
+    /**
+     * Armed shell render hooks (slice B1): slot name => client component key.
+     * The shell renders each armed slot's registered component.
+     */
+    renderHooks?: Record<string, string>;
+    /**
+     * Database-notifications bell (slice B3): present when the panel opts in,
+     * with the client polling interval in Filament's '7s' / '150s' style.
+     */
+    notifications?: { polling?: string };
     groups: PanelNavGroup[];
     items: PanelNavItem[];
 }
@@ -50,7 +66,7 @@ export interface PanelNavItem {
  * ones here and fall back to a neutral glyph so an unknown key never breaks
  * the shell.
  */
-function iconFor(name?: string): LucideIcon {
+export function iconFor(name?: string): LucideIcon {
     switch (name) {
         case 'heroicon-o-droplet':
         case 'droplet':
@@ -78,16 +94,24 @@ export default function PanelSidebar() {
             <SidebarHeader>
                 <SidebarMenu>
                     <SidebarMenuItem>
-                        <SidebarMenuButton size="lg" asChild className="group-data-[collapsible=icon]:!p-1.5">
-                            <Link href={dashboardUrl}>
-                                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                                    <GalleryVerticalEnd className="size-4" />
-                                </div>
-                                <span className="truncate font-semibold">
-                                    {panel?.brandName ?? 'Refilament'}
-                                </span>
-                            </Link>
-                        </SidebarMenuButton>
+                        <SidebarMenuButton
+                            size="lg"
+                            className="group-data-[collapsible=icon]:!p-1.5"
+                            render={
+                                <Link href={dashboardUrl}>
+                                    <div className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                                        {panel?.brandLogo ? (
+                                            <img src={panel.brandLogo} alt="" className="size-full object-contain p-1" />
+                                        ) : (
+                                            <GalleryVerticalEnd className="size-4" />
+                                        )}
+                                    </div>
+                                    <span className="truncate font-semibold">
+                                        {panel?.brandName ?? 'Refilament'}
+                                    </span>
+                                </Link>
+                            }
+                        />
                     </SidebarMenuItem>
                 </SidebarMenu>
             </SidebarHeader>
@@ -112,19 +136,61 @@ export default function PanelSidebar() {
                 ) : null}
             </SidebarContent>
 
+            <SidebarFooter>
+                <ShellSlot name="sidebar-footer" />
+            </SidebarFooter>
+
             <SidebarRail />
         </Sidebar>
     );
 }
 
 /**
- * A sidebar group. Collapsible groups get a chevron that toggles their members
- * (pure client state — not a new primitive, and nothing persisted between
- * requests). Non-collapsible groups render as a plain labelled section.
+ * Whether a collapsible group renders open. A persisted "collapsed=1" cookie
+ * wins over the config-seeded default, so a user's choice survives navigation.
+ * Cookie reads are best-effort (document.cookie parsing can be empty in SSR).
+ */
+function groupIsOpen(group: PanelNavGroup, cookieName: string): boolean {
+    if (group.collapsible !== true) {
+        return true;
+    }
+
+    if (typeof document === 'undefined') {
+        return group.collapsed !== true;
+    }
+
+    const stored = document.cookie
+        .split(';')
+        .map((part) => part.trim())
+        .find((part) => part.startsWith(`${cookieName}=`));
+
+    if (stored !== undefined) {
+        return stored.endsWith('=1') === false;
+    }
+
+    return group.collapsed !== true;
+}
+
+/** Persist a group's open/collapsed state to a cookie (path-scoped to the panel). */
+function setGroupCollapsed(cookieName: string, isOpen: boolean): void {
+    if (typeof document === 'undefined') {
+        return;
+    }
+
+    document.cookie = `${cookieName}=${isOpen ? '0' : '1'}; path=/; SameSite=Lax; max-age=31536000`;
+}
+
+/**
+ * A sidebar group. Collapsible groups get a chevron that toggles their members.
+ * The collapsed state is client-owned and persisted to a cookie keyed by the
+ * group's label (slice 1.9 — a group stays collapsed across panel navigation,
+ * no server round trip). The `collapsed` config flag seeds the initial state;
+ * a "collapsed=1" cookie overrides it, and closing a group writes the cookie.
  */
 function PanelGroup({ group, currentUrl }: { group: PanelNavGroup; currentUrl: string }) {
     const Icon = iconFor(group.icon);
-    const [open, setOpen] = useState(group.collapsed !== true);
+    const cookieName = `refilament-nav-${group.label}`;
+    const [open, setOpen] = useState(() => groupIsOpen(group, cookieName));
 
     if (group.collapsible !== true) {
         return (
@@ -150,7 +216,11 @@ function PanelGroup({ group, currentUrl }: { group: PanelNavGroup; currentUrl: s
         <SidebarGroup>
             <button
                 type="button"
-                onClick={() => setOpen((value) => !value)}
+                onClick={() => {
+                    const next = !open;
+                    setOpen(next);
+                    setGroupCollapsed(cookieName, next);
+                }}
                 className="flex w-full items-center justify-between gap-2 px-2 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
             >
                 <span className="flex min-w-0 items-center gap-2">
@@ -182,12 +252,15 @@ function PanelItemButton({ item, currentUrl }: { item: PanelNavItem; currentUrl:
             : currentUrl.startsWith(item.url);
 
     return (
-        <SidebarMenuButton asChild isActive={active}>
-            <Link href={item.url} {...(item.openInNewTab ? { target: '_blank', rel: 'noreferrer' } : {})}>
-                {Icon && <Icon className="size-4" />}
-                <span>{item.label}</span>
-                {item.badge !== undefined ? <Badge className="ml-auto text-xs">{item.badge}</Badge> : null}
-            </Link>
-        </SidebarMenuButton>
+        <SidebarMenuButton
+            isActive={active}
+            render={
+                <Link href={item.url} {...(item.openInNewTab ? { target: '_blank', rel: 'noreferrer' } : {})}>
+                    {Icon && <Icon className="size-4" />}
+                    <span>{item.label}</span>
+                    {item.badge !== undefined ? <Badge className="ml-auto text-xs">{item.badge}</Badge> : null}
+                </Link>
+            }
+        />
     );
 }

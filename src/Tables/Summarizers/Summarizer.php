@@ -8,6 +8,8 @@ use Closure;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Support\Number;
 use Illuminate\Support\Str;
+use Illuminate\Support\Traits\Macroable;
+use Refilament\Refilament\Support\Concerns\CanBeConfigured;
 
 /**
  * Table footer summary (slice 1.7 — docs/ROADMAP.md "1.7 Record pages").
@@ -26,6 +28,9 @@ use Illuminate\Support\Str;
  */
 abstract class Summarizer
 {
+    use CanBeConfigured;
+    use Macroable;
+
     /** @var Closure(Builder): (int|float|string|null) */
     protected Closure $stateResolver;
 
@@ -39,6 +44,8 @@ abstract class Summarizer
         $this->stateResolver = function (Builder $query): int|float|string|null {
             return $this->summarize($query, (string) $this->column);
         };
+
+        $this->configure();
     }
 
     public static function make(?string $column = null): static

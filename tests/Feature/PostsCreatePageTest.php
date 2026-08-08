@@ -30,9 +30,27 @@ it('serves the create post page as an Inertia page with the schema document', fu
         'required', 'string', 'regex:/^[a-z0-9-]+$/', 'max:255', 'unique:posts,slug',
     ]);
 
-    $response->assertJsonPath('props.schema.0.schema.1.name', 'status');
-    $response->assertJsonPath('props.schema.0.schema.1.default', 'draft');
-    $response->assertJsonCount(3, 'props.schema.0.schema.1.options');
+    // The user_id relationship select (slice C1) now sits between the grid
+    // and the status select.
+    $response->assertJsonPath('props.schema.0.schema.1.name', 'user_id');
+    $response->assertJsonPath('props.schema.0.schema.1.searchable', true);
+    $response->assertJsonPath('props.schema.0.schema.1.hint', 'Searchable user list');
+
+    // Hint actions (slice C5) serialize on the author field with their
+    // client-side visibility rule.
+    $response->assertJsonPath('props.schema.0.schema.0.schema.2.name', 'author');
+    $response->assertJsonPath('props.schema.0.schema.0.schema.2.hintActions.0.name', 'view-authors');
+    $response->assertJsonPath('props.schema.0.schema.0.schema.2.hintActions.0.url', '/refilament/users');
+    $response->assertJsonPath('props.schema.0.schema.0.schema.2.hintActions.0.openUrlInNewTab', true);
+    $response->assertJsonPath('props.schema.0.schema.0.schema.2.hintActions.0.visibleWhenFilled', ['author']);
+
+    $response->assertJsonPath('props.schema.0.schema.2.name', 'status');
+    $response->assertJsonPath('props.schema.0.schema.2.default', 'draft');
+    $response->assertJsonCount(3, 'props.schema.0.schema.2.options');
+    $response->assertJsonPath('props.schema.0.schema.2.hintIcon', [
+        'icon' => 'chart-bar',
+        'tooltip' => 'Shown as a badge in the listing',
+    ]);
 
     // Initial data comes from the resource's formData() — the fields'
     // defaults (null when none is set).
@@ -40,7 +58,9 @@ it('serves the create post page as an Inertia page with the schema document', fu
         'title' => null,
         'slug' => null,
         'author' => null,
+        'user_id' => null,
         'status' => 'draft',
+        'created_at' => null,
     ]);
     $response->assertJsonPath('props.errors', []);
 });

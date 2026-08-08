@@ -27,6 +27,6 @@ class DashboardController
 
         return Inertia::render('refilament/dashboard', [
             'widgets' => array_values($widgets),
-        ]);
+        ])->rootView('refilament::app');
     }
 }

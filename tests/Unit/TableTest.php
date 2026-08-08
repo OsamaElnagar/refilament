@@ -232,9 +232,9 @@ it('serializes a trashed filter with its ternary options', function () {
         'label' => 'Trashed',
         'type' => 'trashed',
         'options' => [
-            ['value' => '', 'label' => 'Without trashed'],
-            ['value' => 'with', 'label' => 'With trashed'],
-            ['value' => 'only', 'label' => 'Only trashed'],
+            ['value' => '', 'label' => 'Without deleted records'],
+            ['value' => 'with', 'label' => 'With deleted records'],
+            ['value' => 'only', 'label' => 'Only deleted records'],
         ],
     ]);
 });

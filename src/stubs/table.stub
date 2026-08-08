@@ -1,0 +1,22 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use Refilament\Refilament\Tables\Column;
+use Refilament\Refilament\Tables\Table;
+use {{ modelImport }};
+
+class {{ class }}
+{
+    public static function configure(Table $table): Table
+    {
+        return $table
+            ->id('{{ tableId }}')
+            ->columns([
+{{ body }}
+            ])
+            ->query({{ modelShort }}::query());
+    }
+}

@@ -30,6 +30,8 @@ class Stat
 
     protected ?string $label = null;
 
+    protected bool $shouldTranslateLabel = false;
+
     /** @var string|Closure|null */
     protected mixed $description = null;
 
@@ -69,6 +71,18 @@ class Stat
     }
 
     /**
+     * Treat the stat label as a translation key resolved through the app's
+     * translator when the stat is serialized. Mirrors Filament's
+     * `translateLabel()`; off by default so labels pass through verbatim.
+     */
+    public function translateLabel(bool $condition = true): static
+    {
+        $this->shouldTranslateLabel = $condition;
+
+        return $this;
+    }
+
+    /**
      * A short supporting line under the value. Accepts a static string or a
      * Closure evaluated at serialization time (e.g. a percent change).
      */
@@ -103,7 +117,9 @@ class Stat
 
     public function getLabel(): string
     {
-        return (string) $this->label;
+        $label = (string) $this->label;
+
+        return $this->shouldTranslateLabel ? __($label) : $label;
     }
 
     /**

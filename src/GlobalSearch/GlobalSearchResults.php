@@ -51,7 +51,7 @@ class GlobalSearchResults
     }
 
     /**
-     * @return bool  true when at least one category holds an empty result list
+     * @return bool true when at least one category holds an empty result list
      */
     public function hasEmptyCategories(): bool
     {

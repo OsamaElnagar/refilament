@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Refilament\Refilament\Tables;
 
+use Closure;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
@@ -26,7 +28,17 @@ class Group
 {
     protected ?string $label = null;
 
+    protected bool $shouldTranslateLabel = false;
+
     protected bool $collapsible = false;
+
+    protected bool $isDate = false;
+
+    /** @var Closure(mixed $record): mixed|null */
+    protected ?Closure $getKeyFromRecordUsing = null;
+
+    /** @var Closure(mixed $record): mixed|null */
+    protected ?Closure $getTitleFromRecordUsing = null;
 
     final public function __construct(protected string $column) {}
 
@@ -47,12 +59,66 @@ class Group
     }
 
     /**
+     * Treat the group label as a translation key resolved through the app's
+     * translator when the group is serialized. Mirrors Filament's
+     * `translateLabel()`; off by default so labels pass through verbatim.
+     */
+    public function translateLabel(bool $condition = true): static
+    {
+        $this->shouldTranslateLabel = $condition;
+
+        return $this;
+    }
+
+    /**
      * Allow the client to collapse this group's rows to just its header.
      * Pure client state — never persisted to the server.
      */
     public function collapsible(bool $condition = true): static
     {
         $this->collapsible = $condition;
+
+        return $this;
+    }
+
+    /**
+     * Mark this group as date-backed. Rows then share a group key on their
+     * date (`Y-m-d`) rather than the raw timestamp, and the header title is
+     * rendered in a human date format. Mirrors Filament's `Group::date()`.
+     */
+    public function date(bool $condition = true): static
+    {
+        $this->isDate = $condition;
+
+        return $this;
+    }
+
+    /**
+     * Compute the group key from a record via a closure instead of reading
+     * the column directly. Mirrors Filament's `Group::getKeyFromRecordUsing()`.
+     * The closure receives the record and may return any value; the key is
+     * still normalized (booleans to '1'/'0', dates to `Y-m-d`) afterwards.
+     *
+     * @param  Closure(mixed $record): mixed  $callback
+     */
+    public function getKeyFromRecordUsing(Closure $callback): static
+    {
+        $this->getKeyFromRecordUsing = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Compute the header title from a record via a closure instead of falling
+     * back to the raw value. Mirrors Filament's
+     * `Group::getTitleFromRecordUsing()`. For a date group the returned value
+     * is still parsed and rendered as a human date.
+     *
+     * @param  Closure(mixed $record): mixed  $callback
+     */
+    public function getTitleFromRecordUsing(Closure $callback): static
+    {
+        $this->getTitleFromRecordUsing = $callback;
 
         return $this;
     }
@@ -68,9 +134,11 @@ class Group
      */
     public function getLabel(): string
     {
-        return $this->label ?? Str::headline(
+        $label = $this->label ?? Str::headline(
             str_contains($this->column, '.') ? Str::afterLast($this->column, '.') : $this->column,
         );
+
+        return $this->shouldTranslateLabel ? __($label) : $label;
     }
 
     public function isCollapsible(): bool
@@ -78,15 +146,72 @@ class Group
         return $this->collapsible;
     }
 
+    public function isDate(): bool
+    {
+        return $this->isDate;
+    }
+
     /**
-     * Resolve the group value for a record — the raw value it is grouped by.
-     * Mirrors Filament's `getKey()`, simplified to the column's attribute
-     * (custom `getKeyFromRecordUsing()` is deferred).
+     * @return Closure(mixed $record): mixed|null
+     */
+    public function hasTitleFromRecordUsing(): ?Closure
+    {
+        return $this->getTitleFromRecordUsing;
+    }
+
+    /**
+     * Resolve the group value for a record — the normalized value it is
+     * grouped by. Mirrors Filament's `getKey()` / `getStringKey()`: a custom
+     * `getKeyFromRecordUsing()` closure short-circuits the raw attribute, and
+     * a date group collapses the value to its `Y-m-d` date string.
      */
     public function getKeyFor(mixed $record): string
     {
-        $value = data_get($record, $this->column);
+        $value = $this->getKeyFromRecordUsing instanceof Closure
+            ? ($this->getKeyFromRecordUsing)($record)
+            : data_get($record, $this->column);
 
-        return $value === null ? '' : (string) $value;
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        if ($this->isDate) {
+            return ($value instanceof Carbon ? $value : Carbon::parse($value))->toDateString();
+        }
+
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+
+        return (string) $value;
+    }
+
+    /**
+     * The display title for a record's group run. A custom
+     * `getTitleFromRecordUsing()` closure wins; otherwise a date group
+     * formats its value as a human date, and any other group falls back to
+     * the raw value.
+     */
+    public function getTitleFor(mixed $record): string
+    {
+        if ($this->getTitleFromRecordUsing instanceof Closure) {
+            $title = ($this->getTitleFromRecordUsing)($record);
+        } else {
+            $title = data_get($record, $this->column);
+        }
+
+        if ($title === null || $title === '') {
+            return '';
+        }
+
+        if ($this->isDate) {
+            return ($title instanceof Carbon ? $title : Carbon::parse($title))->translatedFormat('M j, Y');
+        }
+
+        if (is_bool($title)) {
+            return $title ? '1' : '0';
+        }
+
+        return (string) $title;
     }
 }

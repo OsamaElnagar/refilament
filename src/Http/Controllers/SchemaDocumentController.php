@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Refilament\Refilament\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Refilament\Refilament\Refilament;
 
 class SchemaDocumentController
@@ -17,8 +18,12 @@ class SchemaDocumentController
      * is identical to what the auto-registered create page serves — the same
      * nodes, and the same initial data derived from the fields' defaults —
      * so a modal form and a full-page form always present the same values.
+     *
+     * An optional `?operation=create|edit` query param (slice C6) re-serializes
+     * `hiddenOn()` / `disabledOn()` fields for that operation — the modal
+     * action's type, mirroring the operation the resource pages serialize with.
      */
-    public function show(Refilament $refilament, string $schema): JsonResponse
+    public function show(Request $request, Refilament $refilament, string $schema): JsonResponse
     {
         $resolved = $refilament->resolveSchema($schema);
 
@@ -26,8 +31,10 @@ class SchemaDocumentController
             return response()->json(['error' => 'Unknown schema.'], JsonResponse::HTTP_NOT_FOUND);
         }
 
+        $operation = $request->query('operation');
+
         return response()->json([
-            ...$resolved->toArray(),
+            ...$resolved->toArray(is_string($operation) ? $operation : null),
             // The single derivation point for form defaults — the same
             // Schema::initialData() Resource::formData() delegates to, so the
             // modal never disagrees with the full-page create form.

@@ -24,7 +24,7 @@ export default function ToggleField({ node, value, error, onChange }: FieldProps
             name={node.name}
             checked={checked}
             onCheckedChange={(next) => onChange?.(next)}
-            disabled={node.disabled ?? false}
+            disabled={node.disabled ?? node.readOnly ?? false}
             aria-invalid={error ? true : undefined}
         />
     );

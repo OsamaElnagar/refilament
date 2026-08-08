@@ -22,6 +22,8 @@ class ListRecords extends Page
 
     public static function getPayload(string $resource, Refilament $refilament, ?string $record = null): array
     {
+        static::authorizeViewAny($resource);
+
         $table = $refilament->resolveTable($resource);
 
         // Unreachable in normal runs — the route's where() constraint only

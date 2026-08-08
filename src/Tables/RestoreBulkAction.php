@@ -28,7 +28,8 @@ class RestoreBulkAction extends BulkAction
     {
         $action = parent::make($name);
 
-        $action->label('Restore selected');
+        $action->label('refilament::actions.restore.multiple.label')
+            ->translateLabel();
         $action->color('secondary');
         $action->requiresConfirmation();
         $action->successMessage('Selected posts restored.');

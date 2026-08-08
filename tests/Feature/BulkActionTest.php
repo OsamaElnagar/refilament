@@ -48,9 +48,9 @@ it('serializes the trashed filter in the definition', function () {
         'label' => 'Trashed',
         'type' => 'trashed',
         'options' => [
-            ['value' => '', 'label' => 'Without trashed'],
-            ['value' => 'with', 'label' => 'With trashed'],
-            ['value' => 'only', 'label' => 'Only trashed'],
+            ['value' => '', 'label' => 'Without deleted records'],
+            ['value' => 'with', 'label' => 'With deleted records'],
+            ['value' => 'only', 'label' => 'Only deleted records'],
         ],
     ]);
 });

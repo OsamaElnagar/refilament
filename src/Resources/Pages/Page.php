@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Route as RouteFacade;
 use Illuminate\Support\Str;
 use LogicException;
 use Refilament\Refilament\Http\Controllers\ResourcePageController;
+use Refilament\Refilament\Http\Middleware\Authenticate as PanelAuthenticate;
 use Refilament\Refilament\Pages\Page as BasePage;
 use Refilament\Refilament\Refilament;
 use Refilament\Refilament\Resources\Resource;
@@ -83,7 +84,7 @@ abstract class Page extends BasePage
             )
                 ->where('resource', implode('|', array_map('preg_quote', app(Refilament::class)->getResourceTableIds())))
                 ->where('record', '[0-9]+')
-                ->middleware(config('refilament.panel.auth_middleware', []))
+                ->middleware([PanelAuthenticate::class])
                 ->name($routeName),
         );
     }
@@ -143,7 +144,59 @@ abstract class Page extends BasePage
     }
 
     /**
-     * The display title for a resource's records, derived from its model
+     * Abort with 403 unless the current user may browse this resource's
+     * records (slice 4.1 — docs/ROADMAP.md "4.1 Authorization"). Resolves the
+     * class from the URL segment and delegates to Resource::authorizeViewAny().
+     */
+    protected static function authorizeViewAny(string $resource): void
+    {
+        $class = app(Refilament::class)->getResourceClass($resource);
+
+        if ($class !== null) {
+            $class::authorizeViewAny();
+        }
+    }
+
+    /**
+     * Abort with 403 unless the current user may create a record (slice 4.1).
+     */
+    protected static function authorizeCreate(string $resource): void
+    {
+        $class = app(Refilament::class)->getResourceClass($resource);
+
+        if ($class !== null) {
+            $class::authorizeCreate();
+        }
+    }
+
+    /**
+     * Abort with 403 unless the current user may view the given record
+     * (slice 4.1). The record comes from the resource's own scoped query.
+     */
+    protected static function authorizeView(string $resource, Model $record): void
+    {
+        $class = app(Refilament::class)->getResourceClass($resource);
+
+        if ($class !== null) {
+            $class::authorizeView($record);
+        }
+    }
+
+    /**
+     * Abort with 403 unless the current user may edit the given record
+     * (slice 4.1).
+     */
+    protected static function authorizeEdit(string $resource, Model $record): void
+    {
+        $class = app(Refilament::class)->getResourceClass($resource);
+
+        if ($class !== null) {
+            $class::authorizeEdit($record);
+        }
+    }
+
+    /**
+     * The display name for a resource's records, derived from its model
      * (e.g. "User") — shared by the list, create, edit and view pages.
      *
      * @param  class-string<resource>  $class

@@ -33,12 +33,12 @@ class Grid extends Layout
         return $this->columns;
     }
 
-    public function toArray(): array
+    public function toArray(?string $operation = null): array
     {
         return [
             'type' => $this->getType(),
             'columns' => $this->getColumns(),
-            'schema' => $this->serializeChildren(),
+            'schema' => $this->serializeChildren($operation),
         ];
     }
 }

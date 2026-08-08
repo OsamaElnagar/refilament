@@ -64,7 +64,7 @@ it('truncates a value to a character limit', function () {
 
     $cell = Column::make('title')->limit(10)->getStateFor($post);
 
-    expect($cell)->toBe('A dramat...');
+    expect($cell)->toBe('A dramatic...');
 });
 
 it('prepends and appends static text', function () {
@@ -127,8 +127,8 @@ it('colors a column from a static color', function () {
 
 it('maps states to colors via colors()', function () {
     $column = Column::make('status')->colors([
-        'published' => 'success',
-        'draft' => 'warning',
+        'success' => 'published',
+        'warning' => 'draft',
     ]);
 
     $published = Post::factory()->create(['status' => 'published']);

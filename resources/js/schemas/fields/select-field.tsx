@@ -5,6 +5,7 @@ import { Check, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import FieldHeader from '@/schemas/field-header';
 import type { FieldProps } from '@/schemas/registry';
 
 export default function SelectField({
@@ -14,11 +15,12 @@ export default function SelectField({
     options: resolvedOptions,
     loading,
     onChange,
+    formValues,
 }: FieldProps) {
     const options = resolvedOptions ?? node.options ?? [];
     const multiple = node.multiple ?? false;
     const searchable = node.searchable ?? false;
-    const disabled = node.disabled ?? false;
+    const disabled = node.disabled ?? node.readOnly ?? false;
     const isDependent = (node.dependsOn?.length ?? 0) > 0;
 
     const selectedValues = useMemo<string[]>(() => {
@@ -174,14 +176,7 @@ export default function SelectField({
 
     return (
         <div ref={rootRef}>
-            <div className="mb-1.5 flex items-baseline justify-between gap-2">
-                <span className="text-sm font-medium">
-                    {node.label}
-                    {node.required ? <span className="text-destructive"> *</span> : null}
-                </span>
-
-                {node.helperText ? <span className="text-xs text-muted-foreground">{node.helperText}</span> : null}
-            </div>
+            <FieldHeader node={node} formValues={formValues} />
 
             <div className="relative">
                 <Button

@@ -2,6 +2,8 @@ import { createInertiaApp } from '@inertiajs/react';
 import { createRoot } from 'react-dom/client';
 import type { ComponentType } from 'react';
 
+import QuickLinks from '@/components/shell/QuickLinks';
+import { registerShellSlot } from '@/components/shell/ShellSlots';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { initializeTheme } from '@/hooks/use-appearance';
@@ -14,6 +16,10 @@ registerDefaultFields();
 registerDefaultLayouts();
 registerDefaultEntries();
 
+// Demo shell render hook (slice B1): map the server-declared
+// 'sidebar-footer' slot to the QuickLinks component.
+registerShellSlot('sidebar-footer', QuickLinks);
+
 const pages = import.meta.glob<{ default: ComponentType<SchemaDocument> }>(
     './pages/**/*.tsx',
     { eager: true },
@@ -24,7 +30,7 @@ createInertiaApp({
     resolve: (name) => pages[`./pages/${name}.tsx`],
     setup({ el, App, props }) {
         createRoot(el).render(
-            <TooltipProvider delayDuration={0}>
+            <TooltipProvider delay={0}>
                 <App {...props} />
                 <Toaster />
             </TooltipProvider>,

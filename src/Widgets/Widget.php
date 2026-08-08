@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Refilament\Refilament\Widgets;
 
 use Illuminate\Support\Str;
+use Illuminate\Support\Traits\Macroable;
+use Refilament\Refilament\Support\Concerns\CanBeConfigured;
 
 /**
  * Base widget (slice 3.1 — docs/ROADMAP.md "3.1 Dashboard + StatsOverview
@@ -25,6 +27,9 @@ use Illuminate\Support\Str;
  */
 abstract class Widget
 {
+    use CanBeConfigured;
+    use Macroable;
+
     /**
      * @var int|string|array<string, int|null>
      */
@@ -35,7 +40,10 @@ abstract class Widget
      */
     protected int|string|array $columnStart = [];
 
-    final public function __construct() {}
+    final public function __construct()
+    {
+        $this->configure();
+    }
 
     public static function make(): static
     {
@@ -111,5 +119,17 @@ abstract class Widget
     public function getJsonType(): string
     {
         return Str::snake(class_basename(static::class));
+    }
+
+    /**
+     * The kebab widget id — the `{widget}` segment of the typed widget data
+     * endpoint (`BarChartWidget` → `bar-chart`, like `getJsonType()` the
+     * class name's `Widget` suffix is a PHP-side concern). Widgets that
+     * expose live data (filters / polling) serialize it onto their node so
+     * the React runtime can address the endpoint.
+     */
+    public function getWidgetId(): string
+    {
+        return Str::kebab(str_replace('Widget', '', class_basename(static::class)));
     }
 }

@@ -27,6 +27,12 @@ export interface SchemaSubmitOptions {
      * endpoint, slice 1.7) — do not duplicate it in the body.
      */
     recordInUrl?: boolean;
+    /**
+     * The form operation ('create' | 'edit'), sent as a query param so the
+     * server validates with the matching operation-aware rules (slice C6:
+     * a `hiddenOn('create')` field never fails an invisible "required").
+     */
+    operation?: string;
 }
 
 export interface SchemaSubmitState {
@@ -89,7 +95,10 @@ export function useSchemaSubmit(schemaId: string | undefined, options: SchemaSub
             }
 
             try {
-                const response = await fetch(options.endpoint ?? submitUrl(schemaId ?? 'default'), {
+                const baseUrl = options.endpoint ?? submitUrl(schemaId ?? 'default');
+                const url = options.operation ? `${baseUrl}?operation=${encodeURIComponent(options.operation)}` : baseUrl;
+
+                const response = await fetch(url, {
                     method: 'POST',
                     headers,
                     body: JSON.stringify(
@@ -138,7 +147,7 @@ export function useSchemaSubmit(schemaId: string | undefined, options: SchemaSub
                 }
             }
         },
-        [schemaId, options.endpoint, options.record, options.recordInUrl],
+        [schemaId, options.endpoint, options.record, options.recordInUrl, options.operation],
     );
 
     const clearFieldError = useCallback((name: string): void => {

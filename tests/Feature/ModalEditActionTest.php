@@ -45,10 +45,11 @@ it('serves a record pre-filled into its form fields', function () {
 it('returns only the form fields, never other record attributes', function () {
     $post = Post::firstOrFail();
 
+    // `user_id` is a real form field now (the relationship select), so it
+    // legitimately appears — only true non-fields must stay absent.
     $this->getJson('/refilament/table/posts/record/'.$post->id.'?schema=post-form')
         ->assertOk()
         ->assertJsonMissingPath('data.views')
-        ->assertJsonMissingPath('data.user_id')
         ->assertJsonMissingPath('data.published_at');
 });
 

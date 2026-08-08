@@ -10,6 +10,8 @@ use Refilament\Refilament\Schemas\Components\Section;
 use Refilament\Refilament\Schemas\Components\Select;
 use Refilament\Refilament\Schemas\Components\TextInput;
 use Refilament\Refilament\Schemas\Schema;
+use Refilament\Refilament\Tables\Action;
+use Workbench\App\Enums\PostStatus;
 use Workbench\App\Models\Post;
 
 /**
@@ -48,6 +50,10 @@ class PostsForm
                                 ->label('Slug')
                                 ->placeholder('my-post-title')
                                 ->helperText('Lowercase letters, numbers and dashes; must be unique')
+                                // Operation-aware disable (slice C6): the slug
+                                // is typed on create but locked on edit — the
+                                // immutable identifier pattern.
+                                ->disabledOn('edit')
                                 ->validation(['required', 'string', 'regex:/^[a-z0-9-]+$/', 'max:255', 'unique:posts,slug'])
                                 ->required(),
 
@@ -55,20 +61,65 @@ class PostsForm
                                 ->label('Author')
                                 ->placeholder('Ada Lovelace')
                                 ->validation(['required', 'string', 'max:100'])
-                                ->required(),
+                                ->required()
+                                // Hint actions (slice C5): a small action in
+                                // the label row, mirroring the Ahram
+                                // "View client" idiom. `visibleWhenFilled` is
+                                // a pure client-side rule (no round trip) —
+                                // the button appears once the author is typed
+                                // and opens the users page in a new tab.
+                                ->hintActions([
+                                    Action::make('view-authors')
+                                        ->label('View authors')
+                                        ->icon('document')
+                                        ->tooltip('Open the users page in a new tab')
+                                        ->url('/refilament/users')
+                                        ->openUrlInNewTab()
+                                        ->visibleWhenFilled('author'),
+                                ]),
                         ]),
+
+                        Select::make('user_id')
+                            ->label('User')
+                            ->placeholder('Choose an author')
+                            // Relationship options (slice C1): the option list
+                            // is resolved server-side from Post's `user`
+                            // relationship — the Ahram
+                            // `->relationship('account', 'name')` idiom. The
+                            // shipped list is searchable client-side.
+                            ->relationship('user', 'name')
+                            ->model(Post::class)
+                            ->searchable()
+                            // Hint text (slice C5): the label-row hint slot
+                            // — Filament's `hint()`, serialized as data.
+                            ->hint('Searchable user list'),
 
                         Select::make('status')
                             ->label('Status')
                             ->placeholder('Pick a status')
                             ->default('draft')
-                            ->options([
-                                'draft' => 'Draft',
-                                'published' => 'Published',
-                                'archived' => 'Archived',
-                            ])
+                            // Enum options (slice C2): the option list is
+                            // derived from PostStatus's cases — the Ahram
+                            // `->options(SomeEnum::class)` idiom.
+                            ->options(PostStatus::class)
                             ->validation(['required', 'in:draft,published,archived'])
-                            ->required(),
+                            ->required()
+                            // Hint icon (slice C5): Filament's `hintIcon()` —
+                            // a small glyph with a hover tooltip in the
+                            // label row.
+                            ->hintIcon('chart-bar', 'Shown as a badge in the listing'),
+
+                        TextInput::make('created_at')
+                            ->label('Created')
+                            ->placeholder('—')
+                            // Slice C4 + C6 together, the Ahram computed-field
+                            // idiom: hidden while creating (the server stamps
+                            // it), and on edit it renders read-only and is
+                            // never submitted (`dehydrated(false)`) so the
+                            // stored timestamp can't be overwritten by the form.
+                            ->readOnly()
+                            ->dehydrated(false)
+                            ->hiddenOn('create'),
                     ]),
             ])
             ->submitUsing(static function (array $data): void {

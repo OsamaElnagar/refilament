@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace Refilament\Refilament\Tables;
 
 use Closure;
+use Illuminate\Support\Traits\Macroable;
 use LogicException;
 use Refilament\Refilament\Notifications\Notification;
+use Refilament\Refilament\Support\Concerns\CanBeConfigured;
+use Refilament\Refilament\Tables\Concerns\CanBeAuthorized;
 
 /**
  * Table action (slice 9).
@@ -17,13 +20,24 @@ use Refilament\Refilament\Notifications\Notification;
  * resource's form. The `action()` closure never survives serialization — the
  * table resolver rebuilds it server-side when a request arrives.
  *
+ * Policy-backed authorization (slice 4.1) ships on the shared
+ * CanBeAuthorized trait: `authorize()` / `authorizeAny()` declare policy
+ * abilities the current panel user must pass before the action renders or
+ * runs, with a permissive default (no policy → allowed).
+ *
  * Deferred: icons, tooltips, action groups, confirmation with custom text,
  * disabled states, success/failure notifications with titles, configurable
  * modal headings (the modal titles itself from the action label today).
  */
 class Action
 {
+    use CanBeAuthorized;
+    use CanBeConfigured;
+    use Macroable;
+
     protected ?string $label = null;
+
+    protected bool $shouldTranslateLabel = false;
 
     protected ?string $color = null;
 
@@ -42,6 +56,61 @@ class Action
 
     protected bool $requiresConfirmation = false;
 
+    /**
+     * Where the action navigates on click — used by global-search result
+     * actions (slice 3.5). Mirrors Filament's `Action::url()`: the honest
+     * request/response model for a search-result action is plain navigation,
+     * not a fake Livewire call. When set, the React runtime follows it with a
+     * router visit; it never serializes a closure.
+     */
+    protected ?string $url = null;
+
+    /**
+     * An icon rendered next to the action label, given by name (e.g. a
+     * lucide/heroicon key the React runtime maps). Mirrors Filament's
+     * `Action::icon()`; omitted from the payload when unset.
+     */
+    protected ?string $icon = null;
+
+    /**
+     * A short hint shown on hover, mirroring Filament's `Action::tooltip()`.
+     * Omitted from the payload when unset.
+     */
+    protected ?string $tooltip = null;
+
+    /**
+     * Whether a URL action opens in a new tab (mirrors Filament's
+     * `Action::openUrlInNewTab()`). The React runtime opens the URL in a new
+     * tab when set; otherwise it router-visits in place.
+     */
+    protected bool $opensUrlInNewTab = false;
+
+    /**
+     * Field names that must all hold a non-empty value for this action to
+     * render — the serialized client-side rule replacing Filament's runtime
+     * `visible(fn (Get $get) => ...)` for hint actions (the Ahram idiom
+     * `visible(fn (Get $get) => (bool) $get('client_id'))`). Evaluated in
+     * the React runtime against live form state; never a server closure.
+     *
+     * @var array<int, string>
+     */
+    protected array $visibleWhenFilled = [];
+
+    /**
+     * Whether the modal renders as a drawer (slide-over) instead of a
+     * centered dialog (slice 2.7) — mirrors Filament's `Action::slideOver()`.
+     * When true, the React runtime hosts the form in the shadcn Drawer
+     * primitive mounted from the configured edge.
+     */
+    protected bool $isSlideOver = false;
+
+    /**
+     * The drawer's edge: 'start' (left in LTR) or 'end' (right in LTR).
+     * Mirrors Filament's SlideOverPosition. Null means 'end' (the common
+     * admin slide-over edge).
+     */
+    protected ?string $slideOverPosition = null;
+
     /** @var Closure(object, array<string, mixed>): mixed|null */
     protected ?Closure $action = null;
 
@@ -52,7 +121,10 @@ class Action
 
     protected ?Notification $successNotification = null;
 
-    final public function __construct(protected ?string $name = null) {}
+    final public function __construct(protected ?string $name = null)
+    {
+        $this->configure();
+    }
 
     public static function make(?string $name = null): static
     {
@@ -62,6 +134,18 @@ class Action
     public function label(?string $label): static
     {
         $this->label = $label;
+
+        return $this;
+    }
+
+    /**
+     * Treat the action label as a translation key resolved through the app's
+     * translator when the action is serialized. Mirrors Filament's
+     * `translateLabel()`; off by default so labels pass through verbatim.
+     */
+    public function translateLabel(bool $condition = true): static
+    {
+        $this->shouldTranslateLabel = $condition;
 
         return $this;
     }
@@ -107,6 +191,93 @@ class Action
         $this->requiresConfirmation = $condition;
 
         return $this;
+    }
+
+    /**
+     * Make the action a pure link that navigates to the given URL when
+     * clicked. Targeted at global-search result actions (slice 3.5), where a
+     * per-record navigation is the natural behavior; row/header actions keep
+     * running through the typed action endpoint instead.
+     */
+    public function url(?string $url): static
+    {
+        $this->url = $url;
+
+        return $this;
+    }
+
+    public function getUrl(): ?string
+    {
+        return $this->url;
+    }
+
+    /**
+     * An icon rendered next to the action label, given by name (a lucide /
+     * heroicon key the React runtime maps). Mirrors Filament's `Action::icon()`.
+     */
+    public function icon(?string $icon): static
+    {
+        $this->icon = $icon;
+
+        return $this;
+    }
+
+    public function getIcon(): ?string
+    {
+        return $this->icon;
+    }
+
+    /**
+     * A short hint shown on hover, mirroring Filament's `Action::tooltip()`.
+     */
+    public function tooltip(?string $tooltip): static
+    {
+        $this->tooltip = $tooltip;
+
+        return $this;
+    }
+
+    public function getTooltip(): ?string
+    {
+        return $this->tooltip;
+    }
+
+    /**
+     * Open the URL action in a new tab instead of navigating in place
+     * (mirrors Filament's `Action::openUrlInNewTab()`).
+     */
+    public function openUrlInNewTab(bool $condition = true): static
+    {
+        $this->opensUrlInNewTab = $condition;
+
+        return $this;
+    }
+
+    /**
+     * Only render this action while every named field holds a non-empty
+     * value — the serializable client-side counterpart to Filament's runtime
+     * `visible(fn (Get $get) => (bool) $get('client_id'))` (slice C5).
+     *
+     * @param  string|array<int, string>  $fields
+     */
+    public function visibleWhenFilled(string|array $fields): static
+    {
+        $this->visibleWhenFilled = (array) $fields;
+
+        return $this;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function getVisibleWhenFilled(): array
+    {
+        return $this->visibleWhenFilled;
+    }
+
+    public function opensUrlInNewTab(): bool
+    {
+        return $this->opensUrlInNewTab;
     }
 
     /**
@@ -164,7 +335,9 @@ class Action
 
     public function getLabel(): string
     {
-        return $this->label ?? ucfirst((string) $this->name);
+        $label = $this->label ?? ucfirst((string) $this->name);
+
+        return $this->shouldTranslateLabel ? __($label) : $label;
     }
 
     public function getColor(): ?string
@@ -230,11 +403,18 @@ class Action
     }
 
     /**
-     * Whether the action should render for a given record. Defaults to true
-     * when no visibility closure is set.
+     * Whether the action should render for a given record (slice 4.1). Both a
+     * declared authorization (policy check) and the per-record `visible()`
+     * closure must pass; an unauthorized action neither renders on the row nor
+     * runs through the action endpoint (which re-checks this before invoking
+     * the closure). Defaults to true when neither is set.
      */
     public function isVisibleFor(object $record): bool
     {
+        if (! $this->isAuthorizedFor($record)) {
+            return false;
+        }
+
         if (! $this->visible instanceof Closure) {
             return true;
         }
@@ -269,6 +449,26 @@ class Action
 
         if ($this->requiresConfirmation) {
             $payload['requiresConfirmation'] = true;
+        }
+
+        if ($this->url !== null) {
+            $payload['url'] = $this->url;
+
+            if ($this->opensUrlInNewTab) {
+                $payload['openUrlInNewTab'] = true;
+            }
+        }
+
+        if ($this->visibleWhenFilled !== []) {
+            $payload['visibleWhenFilled'] = $this->visibleWhenFilled;
+        }
+
+        if ($this->icon !== null) {
+            $payload['icon'] = $this->icon;
+        }
+
+        if ($this->tooltip !== null) {
+            $payload['tooltip'] = $this->tooltip;
         }
 
         return $payload;

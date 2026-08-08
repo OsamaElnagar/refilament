@@ -539,7 +539,8 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
                               return (
                                   <Checkbox
                                       aria-label="Select all rows on this page"
-                                      checked={allSelected || (someSelected ? 'indeterminate' : false)}
+                                      checked={allSelected}
+                                      indeterminate={someSelected}
                                       onCheckedChange={(checked) => {
                                           setSelectedRecords((current) => {
                                               const next = new Set(current);
@@ -1171,12 +1172,14 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
 
                         {hasToggleableColumns ? (
                             <DropdownMenu open={isColumnsOpen} onOpenChange={setIsColumnsOpen}>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" size="sm" className="gap-1.5">
-                                        <Columns3 className="size-4" aria-hidden="true" />
-                                        Columns
-                                    </Button>
-                                </DropdownMenuTrigger>
+                                <DropdownMenuTrigger
+                                    render={
+                                        <Button variant="outline" size="sm" className="gap-1.5">
+                                            <Columns3 className="size-4" aria-hidden="true" />
+                                            Columns
+                                        </Button>
+                                    }
+                                />
                                 <DropdownMenuContent align="end" className="w-56">
                                     <div className="flex items-center justify-between px-2 py-1.5">
                                         <DropdownMenuLabel className="px-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">

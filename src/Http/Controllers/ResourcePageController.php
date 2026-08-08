@@ -56,6 +56,6 @@ class ResourcePageController
         return Inertia::render(
             $page::getInertiaComponent(),
             $page::getPayload($resource, $refilament, $record),
-        );
+        )->rootView('refilament::app');
     }
 }

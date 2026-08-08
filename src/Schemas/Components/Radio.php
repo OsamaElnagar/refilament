@@ -56,10 +56,10 @@ class Radio extends Component
         return $this->columns;
     }
 
-    public function toArray(): array
+    public function toArray(?string $operation = null): array
     {
         return $this->filterNullValues([
-            ...parent::toArray(),
+            ...parent::toArray($operation),
             'inline' => $this->isInline() ? true : null,
             'columns' => $this->columns,
         ]);

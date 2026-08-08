@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 namespace Refilament\Refilament\GlobalSearch\Providers;
 
-use Refilament\Refilament\GlobalSearch\GlobalSearchResult;
 use Refilament\Refilament\GlobalSearch\GlobalSearchResults;
 use Refilament\Refilament\GlobalSearch\Providers\Contracts\GlobalSearchProvider;
 use Refilament\Refilament\Refilament;
-use Refilament\Refilament\Resources\Resource;
 
 /**
  * The default global search provider (slice 3.5) — mirrors

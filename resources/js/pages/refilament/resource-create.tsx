@@ -53,6 +53,7 @@ export default function ResourceCreate(props: ResourceCreateProps) {
                         errors={props.errors}
                         schemaId={props.id}
                         submitLabel={`Create ${props.resourceTitle}`}
+                        operation="create"
                         onSuccess={() => router.visit(`/refilament/${props.resource}`)}
                     />
                 </Card>

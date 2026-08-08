@@ -9,7 +9,9 @@ use Closure;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Number;
 use Illuminate\Support\Str;
+use Illuminate\Support\Traits\Macroable;
 use LogicException;
+use Refilament\Refilament\Support\Concerns\CanBeConfigured;
 use Refilament\Refilament\Tables\Summarizers\Summarizer;
 
 /**
@@ -31,7 +33,12 @@ use Refilament\Refilament\Tables\Summarizers\Summarizer;
  */
 class Column
 {
+    use CanBeConfigured;
+    use Macroable;
+
     protected ?string $label = null;
+
+    protected bool $shouldTranslateLabel = false;
 
     protected ?string $placeholder = null;
 
@@ -83,7 +90,10 @@ class Column
     /** @var array<int, Summarizer> */
     protected array $summarizers = [];
 
-    final public function __construct(protected ?string $name = null) {}
+    final public function __construct(protected ?string $name = null)
+    {
+        $this->configure();
+    }
 
     public static function make(?string $name = null): static
     {
@@ -93,6 +103,18 @@ class Column
     public function label(?string $label): static
     {
         $this->label = $label;
+
+        return $this;
+    }
+
+    /**
+     * Treat the header label as a translation key resolved through the app's
+     * translator when the column is serialized. Mirrors Filament's
+     * `translateLabel()`; off by default so labels pass through verbatim.
+     */
+    public function translateLabel(bool $condition = true): static
+    {
+        $this->shouldTranslateLabel = $condition;
 
         return $this;
     }
@@ -107,12 +129,11 @@ class Column
     /**
      * Mark the column as sortable. Clients send `sort` / `direction` query
      * params to the index endpoint, which orders the query server-side
-     * (docs/CONTRACT.md, "Tables").
+     * (docs/CONTRACT.md, "Tables"). A relationship (dot-notation) column is
+     * ordered by a correlated subquery over its related table (Slice 2.1).
      */
     public function sortable(bool $condition = true): static
     {
-        $this->assertDirectiveOnRelationship('sortable');
-
         $this->sortable = $condition;
 
         return $this;
@@ -120,12 +141,12 @@ class Column
 
     /**
      * Mark the column as searchable: the global `search` query param matches
-     * against it with a `LIKE` clause (docs/CONTRACT.md, "Tables").
+     * against it with a `LIKE` clause (docs/CONTRACT.md, "Tables"). A
+     * relationship (dot-notation) column matches via Eloquent's native
+     * `whereRelation` (Slice 2.1).
      */
     public function searchable(bool $condition = true): static
     {
-        $this->assertDirectiveOnRelationship('searchable');
-
         $this->searchable = $condition;
 
         return $this;
@@ -281,23 +302,25 @@ class Column
     }
 
     /**
-     * Prepend a static prefix to the displayed value.
+     * Prepend a static prefix to the displayed value. Applied after any
+     * formatter so it composes with suffix() and formatStateUsing().
      */
     public function prefix(string $prefix): static
     {
-        return $this->formatStateUsing(static function (mixed $state) use ($prefix): string {
-            return $prefix.(string) ($state ?? '');
-        });
+        $this->prefix = $prefix;
+
+        return $this;
     }
 
     /**
-     * Append a static suffix to the displayed value.
+     * Append a static suffix to the displayed value. Applied after any
+     * formatter so it composes with prefix() and formatStateUsing().
      */
     public function suffix(string $suffix): static
     {
-        return $this->formatStateUsing(static function (mixed $state) use ($suffix): string {
-            return (string) ($state ?? '').$suffix;
-        });
+        $this->suffix = $suffix;
+
+        return $this;
     }
 
     /**
@@ -452,6 +475,13 @@ class Column
      */
     public function getLabel(): string
     {
+        $label = $this->resolveLabel();
+
+        return $this->shouldTranslateLabel ? __($label) : $label;
+    }
+
+    protected function resolveLabel(): string
+    {
         if ($this->label !== null) {
             return $this->label;
         }
@@ -510,7 +540,17 @@ class Column
     {
         $state = $this->resolveRawState($record);
 
-        return $this->formatUsing !== null ? ($this->formatUsing)($state, $record) : $state;
+        $state = $this->formatUsing !== null ? ($this->formatUsing)($state, $record) : $state;
+
+        if ($this->prefix !== '') {
+            $state = $this->prefix.(string) ($state ?? '');
+        }
+
+        if ($this->suffix !== '') {
+            $state = (string) ($state ?? '').$this->suffix;
+        }
+
+        return $state;
     }
 
     /**
@@ -699,14 +739,30 @@ class Column
     }
 
     /**
-     * Dot-notation relationship columns have no plain SQL column to sort or
-     * search against without join logic, which is deferred
-     * (docs/CONTRACT.md, "Tables").
+     * The relationship path of a dot-notation column (`user.name` => `user`),
+     * or null for a plain column. Used to build the correlated subquery for
+     * relationship sort and the `whereRelation` for relationship search
+     * (Slice 2.1).
      */
-    private function assertDirectiveOnRelationship(string $directive): void
+    public function getRelationshipName(): ?string
     {
-        if ($this->isRelationship()) {
-            throw new LogicException("Column [{$this->name}] cannot be {$directive} — dot-notation relationship columns need join logic, which is deferred.");
+        if ($this->name === null || ! $this->isRelationship()) {
+            return null;
         }
+
+        return Str::beforeLast($this->name, '.');
+    }
+
+    /**
+     * The final attribute segment of a dot-notation column (`user.name` =>
+     * `name`), or the whole column name for a plain column.
+     */
+    public function getAttributeName(): ?string
+    {
+        if ($this->name === null) {
+            return null;
+        }
+
+        return $this->isRelationship() ? Str::afterLast($this->name, '.') : $this->name;
     }
 }

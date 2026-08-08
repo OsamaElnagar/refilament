@@ -245,6 +245,15 @@ class RelationManagerController
             return response()->json(['error' => 'Unknown action.'], JsonResponse::HTTP_NOT_FOUND);
         }
 
+        // Authorization gate (slice 4.1): a header (create) or row action the
+        // current user may not run is refused outright. Row actions are
+        // additionally re-checked through isVisibleFor() below — which folds
+        // per-record authorization in — so the gate here covers the record-less
+        // header-create path (where there is no record to authorize against).
+        if (! $actionInstance->isAuthorized()) {
+            return response()->json(['error' => 'Action is not available.'], JsonResponse::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
         $data = $request->input('data', []);
 
         if (! is_array($data)) {
@@ -261,7 +270,7 @@ class RelationManagerController
             }
 
             $schema = $relationClass::form(Schema::make());
-            $validated = $this->validateSchemaData($schema, $data);
+            $validated = $this->validateSchemaData($schema, $data, operation: 'create');
 
             // HasMany::create() assigns the parent's foreign key on the new
             // record, so the created comment always belongs to this owner.
@@ -297,7 +306,7 @@ class RelationManagerController
         // with uniqueness rules ignoring the record being edited.
         if ($actionInstance->getSchema() !== null) {
             $schema = $relationClass::form(Schema::make());
-            $data = $this->validateSchemaData($schema, $data, (string) $target->getKey());
+            $data = $this->validateSchemaData($schema, $data, (string) $target->getKey(), 'edit');
         }
 
         try {

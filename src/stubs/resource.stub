@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace {{ namespace }};
 
 use Refilament\Refilament\Resources\Resource;
-use Refilament\Refilament\Schemas\Components\TextInput;
 use Refilament\Refilament\Schemas\Schema;
-use Refilament\Refilament\Tables\Column;
 use Refilament\Refilament\Tables\Table;
+use {{ schemaFqn }};
+use {{ tableFqn }};
 use {{ modelImport }};
 
 class {{ class }} extends Resource
@@ -24,22 +24,21 @@ class {{ class }} extends Resource
     // protected static ?string $tableId = 'posts';
     // protected static ?string $formId = 'post-form';
 
+    /**
+     * The table definition — delegated to the standalone class so the same
+     * table can be reused by relation managers, widgets and cross-cutting
+     * components (docs/ARCHITECTURE.md, "Reusable table/form classes").
+     */
     public static function table(Table $table): Table
     {
-        return $table
-            ->id(static::getTableId())
-            ->columns([
-{{ tableBody }}
-            ])
-            ->query({{ modelShort }}::query());
+        return {{ tableShort }}::configure($table);
     }
 
+    /**
+     * The form schema — likewise extracted into a standalone, reusable class.
+     */
     public static function form(Schema $schema): Schema
     {
-        return $schema
-            ->id(static::getFormId())
-            ->components([
-{{ formBody }}
-            ]);
+        return {{ schemaShort }}::configure($schema);
     }
 }

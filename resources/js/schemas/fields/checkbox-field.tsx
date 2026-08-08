@@ -26,7 +26,7 @@ export default function CheckboxField({ node, value, error, onChange }: FieldPro
             name={node.name}
             checked={checked}
             onCheckedChange={(next) => onChange?.(next === true)}
-            disabled={node.disabled ?? false}
+            disabled={node.disabled ?? node.readOnly ?? false}
             aria-invalid={error ? true : undefined}
         />
     );

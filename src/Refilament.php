@@ -5,12 +5,21 @@ declare(strict_types=1);
 namespace Refilament\Refilament;
 
 use Closure;
+use FilesystemIterator;
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Support\Facades\Route as RouteFacade;
 use LogicException;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use Refilament\Refilament\Http\Controllers\PanelPageController;
+use Refilament\Refilament\Http\Middleware\Authenticate as PanelAuthenticate;
+use Refilament\Refilament\Pages\Page;
 use Refilament\Refilament\Panel\Panel;
 use Refilament\Refilament\Resources\RelationManagers\RelationManager;
 use Refilament\Refilament\Resources\Resource;
 use Refilament\Refilament\Schemas\Schema;
 use Refilament\Refilament\Tables\Table;
+use Refilament\Refilament\Widgets\Widget;
 
 class Refilament
 {
@@ -55,6 +64,16 @@ class Refilament
      * @var array<string, array<string, class-string<RelationManager>>>
      */
     protected array $relationManagers = [];
+
+    /**
+     * Widget resolvers keyed by the widget id the client requests through the
+     * typed widget data endpoint (slice 3.2 — docs/CONTRACT.md, "Widgets").
+     * The closure rebuilds the widget per request (filters + data closures
+     * included), mirroring registerSchemaResolver/registerTable.
+     *
+     * @var array<string, Closure(): Widget>
+     */
+    protected array $widgetResolvers = [];
 
     /**
      * Register the resolver for a schema document, keyed by its id.
@@ -107,9 +126,43 @@ class Refilament
     }
 
     /**
-     * Register every Resource class found in a directory under its table and
-     * form ids (docs/ARCHITECTURE.md, "Resources"). Mirrors Filament's panel
-     * resource discovery; a resource opts out via its isDiscovered().
+     * Register the resolver for a widget, keyed by its id (the kebab widget
+     * class basename, or a custom key). The closure must return the live
+     * widget instance — filters and data closures included, since a widget's
+     * data can only re-resolve server-side (never survive serialization).
+     *
+     * @param  Closure(): Widget  $resolver
+     */
+    public function registerWidgetResolver(string $key, Closure $resolver): static
+    {
+        $this->widgetResolvers[$key] = $resolver;
+
+        return $this;
+    }
+
+    /**
+     * The widget instance registered under a widget id, if any.
+     */
+    public function resolveWidget(string $key): ?Widget
+    {
+        $resolver = $this->widgetResolvers[$key] ?? null;
+
+        if (! $resolver instanceof Closure) {
+            return null;
+        }
+
+        return $resolver();
+    }
+
+    /**
+     * Register every Resource class found in a directory — including nested
+     * folders — under its table and form ids (docs/ARCHITECTURE.md,
+     * "Resources"). Mirrors Filament's panel resource discovery; a resource
+     * opts out via its isDiscovered(). The namespace is derived from the
+     * file's path relative to the scanned root, so a self-contained
+     * per-resource folder (`Resources/Posts/PostResource.php` →
+     * `App\Refilament\Resources\Posts\PostResource`) resolves its class
+     * without manual registration.
      */
     public function registerResourcesFromDirectory(string $path, string $namespace): static
     {
@@ -117,10 +170,24 @@ class Refilament
             return $this;
         }
 
-        foreach (glob($path.'/*Resource.php') ?: [] as $file) {
-            /** @var class-string<resource> $class */
-            $class = $namespace.'\\'.basename($file, '.php');
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
+        );
 
+        foreach ($iterator as $file) {
+            if (! $file->isFile() || ! str_ends_with($file->getFilename(), 'Resource.php')) {
+                continue;
+            }
+
+            // PSR-4 maps the folder structure under the scan root onto the
+            // namespace — `Resources/Posts/PostResource.php` gets
+            // `App\Refilament\Resources\Posts`.
+            $relative = substr($file->getPath(), strlen($path) + 1);
+            $class = rtrim($namespace, '\\')
+                .'\\'.($relative !== '' ? str_replace(DIRECTORY_SEPARATOR, '\\', $relative).'\\' : '')
+                .basename($file->getFilename(), '.php');
+
+            /** @var class-string<resource> $class */
             if (! is_subclass_of($class, Resource::class)) {
                 continue;
             }
@@ -204,8 +271,15 @@ class Refilament
     {
         return $this->panel ??= Panel::make()
             ->resources($this->getResources())
+            ->pages((array) config('refilament.panel.pages', []))
+            ->discoverPages(
+                (string) config('refilament.panel.pages_path'),
+                (string) config('refilament.panel.pages_namespace'),
+            )
             ->id(config('refilament.panel.id', 'refilament'))
             ->brandName(config('refilament.panel.brand_name', 'Refilament'))
+            ->brandLogo(config('refilament.panel.brand_logo'))
+            ->topNavigation(config('refilament.panel.top_navigation', false))
             ->dashboardUrl(config('refilament.panel.dashboard_url', '/refilament'))
             ->colors(config('refilament.panel.colors', []))
             ->widgets(config('refilament.panel.widgets', []))
@@ -222,6 +296,24 @@ class Refilament
     public function getResourceClass(string $tableId): ?string
     {
         return $this->resourceClasses[$tableId] ?? null;
+    }
+
+    /**
+     * The current panel user authorization decisions are made for (slice 4.1
+     * — docs/ROADMAP.md "4.1 Authorization"). Resolved lazily per request
+     * through the panel's auth guard, so it always reflects the actual
+     * visitor (there is no persistent component between requests to remember
+     * state). Resource, Action and BulkAction all delegate here so an
+     * ability check for a table action uses the same user as a resource page
+     * gate.
+     */
+    public function authorizationUser(): ?Authenticatable
+    {
+        $guard = $this->panel()->getAuthGuard();
+
+        $user = app('auth')->guard($guard)->user();
+
+        return $user instanceof Authenticatable ? $user : null;
     }
 
     /**
@@ -301,6 +393,55 @@ class Refilament
             }
         }
 
+        $pages = $this->panel()->getPages();
+
+        if ($pages !== []) {
+            $pageSlugs = [];
+
+            foreach ($pages as $pageClass) {
+                $slug = $pageClass::getSlug();
+
+                if (isset($pageSlugs[$slug])) {
+                    throw new LogicException(
+                        "Standalone pages [{$pageSlugs[$slug]}] and [{$pageClass}] both use the "
+                        ."slug [{$slug}] — panel pages must have unique slugs.",
+                    );
+                }
+
+                $pageSlugs[$slug] = $pageClass;
+            }
+
+            // One shared route serves every standalone panel page — the
+            // where() gate restricts it to the declared slugs, mirroring the
+            // shared {resource} route for resource pages. Registered here
+            // (after the resource routes above) so it can't shadow the
+            // exact-path dashboard or collide with a discovered resource id.
+            RouteFacade::get('/refilament/{page}', [PanelPageController::class, 'show'])
+                ->where('page', implode('|', array_map('preg_quote', array_keys($pageSlugs))))
+                ->middleware([PanelAuthenticate::class])
+                ->name('refilament.page');
+        }
+
         return $this;
+    }
+
+    /**
+     * The standalone panel page whose slug matches a given
+     * `{page}` route segment, or null if none. Used by PanelPageController
+     * to resolve the page class from the URL — the panel auto-registers a
+     * single shared route gated to the slugs of every standalone page, so
+     * the lookup is the inverse of that gate.
+     *
+     * @return class-string<Page>|null
+     */
+    public function resolvePanelPage(string $slug): ?string
+    {
+        foreach ($this->panel()->getPages() as $pageClass) {
+            if ($pageClass::getSlug() === $slug) {
+                return $pageClass;
+            }
+        }
+
+        return null;
     }
 }

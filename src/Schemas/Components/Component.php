@@ -4,15 +4,25 @@ declare(strict_types=1);
 
 namespace Refilament\Refilament\Schemas\Components;
 
+use BackedEnum;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use Illuminate\Support\Traits\Macroable;
+use LogicException;
+use Refilament\Refilament\Support\Concerns\CanBeConfigured;
+use Refilament\Refilament\Tables\Action;
 
 abstract class Component
 {
+    use CanBeConfigured;
+    use Macroable;
+
     protected ?string $name = null;
 
     protected ?string $label = null;
+
+    protected bool $shouldTranslateLabel = false;
 
     /**
      * The record this component is bound to when serialized read-only (e.g.
@@ -26,13 +36,49 @@ abstract class Component
 
     protected ?string $helperText = null;
 
-    protected int|string|bool|null $default = null;
+    /**
+     * A short line rendered in the field's label row (slice C5) — mirrors
+     * Filament's `hint()`. Serialized as data; the React runtime renders it
+     * next to the label with hint icons and hint actions.
+     */
+    protected ?string $hint = null;
+
+    /** @var array{icon: string, tooltip: string|null}|null */
+    protected ?array $hintIcon = null;
+
+    /**
+     * Small actions rendered in the field's label row (slice C5) — the Ahram
+     * "View client / View statement" idiom. Each action serializes its
+     * label/icon/tooltip/url and any client-side `visibleWhenFilled()` rule;
+     * closures never survive serialization.
+     *
+     * @var array<int, Action>
+     */
+    protected array $hintActions = [];
+
+    protected int|string|bool|float|null $default = null;
 
     protected bool $isRequired = false;
 
     protected bool $isDisabled = false;
 
+    protected bool $isReadOnly = false;
+
+    /**
+     * Whether the field's value is submitted with the form data. Mirrors
+     * Filament's dehydrated(): a `dehydrated(false)` field still renders and
+     * displays its value, but is excluded from the submit payload and from
+     * server-side validation (docs/CONTRACT.md, "Form submission").
+     */
+    protected bool $isDehydrated = true;
+
     protected bool $isHidden = false;
+
+    /** @var array<int, string> */
+    protected array $hiddenOn = [];
+
+    /** @var array<int, string> */
+    protected array $disabledOn = [];
 
     protected bool $isAutofocused = false;
 
@@ -58,6 +104,8 @@ abstract class Component
     final public function __construct(?string $name = null)
     {
         $this->name($name);
+
+        $this->configure();
     }
 
     public static function make(?string $name = null): static
@@ -91,6 +139,18 @@ abstract class Component
         return $this;
     }
 
+    /**
+     * Treat the label as a translation key resolved through the app's
+     * translator when the component is serialized. Mirrors Filament's
+     * `translateLabel()`; off by default so labels pass through verbatim.
+     */
+    public function translateLabel(bool $condition = true): static
+    {
+        $this->shouldTranslateLabel = $condition;
+
+        return $this;
+    }
+
     public function helperText(?string $helperText): static
     {
         $this->helperText = $helperText;
@@ -98,7 +158,66 @@ abstract class Component
         return $this;
     }
 
-    public function default(int|string|bool|null $default): static
+    /**
+     * A short line rendered in the field's label row, mirroring Filament's
+     * `hint()` — the label-row slot that in Filament hosts hint text, icons
+     * and hint actions (slice C5).
+     */
+    public function hint(?string $hint): static
+    {
+        $this->hint = $hint;
+
+        return $this;
+    }
+
+    /**
+     * An icon with an optional tooltip rendered in the label row, mirroring
+     * Filament's `hintIcon()`.
+     */
+    public function hintIcon(string $icon, ?string $tooltip = null): static
+    {
+        $this->hintIcon = ['icon' => $icon, 'tooltip' => $tooltip];
+
+        return $this;
+    }
+
+    /**
+     * Small actions rendered in the label row, mirroring Filament's
+     * `hintActions()`. Each action serializes its label/icon/tooltip/url and
+     * any client-side `visibleWhenFilled()` rule; closures never survive
+     * serialization (docs/CONTRACT.md, "Fields").
+     *
+     * @param  array<int, Action>  $actions
+     */
+    public function hintActions(array $actions): static
+    {
+        $this->hintActions = $actions;
+
+        return $this;
+    }
+
+    public function getHint(): ?string
+    {
+        return $this->hint;
+    }
+
+    /**
+     * @return array{icon: string, tooltip: string|null}|null
+     */
+    public function getHintIcon(): ?array
+    {
+        return $this->hintIcon;
+    }
+
+    /**
+     * @return array<int, Action>
+     */
+    public function getHintActions(): array
+    {
+        return $this->hintActions;
+    }
+
+    public function default(int|string|bool|float|null $default): static
     {
         $this->default = $default;
 
@@ -119,6 +238,61 @@ abstract class Component
     public function disabled(bool $condition = true): static
     {
         $this->isDisabled = $condition;
+
+        return $this;
+    }
+
+    /**
+     * Render the field read-only: the value displays but cannot be edited
+     * (mirrors Filament's readOnly()). Unlike `disabled()`, the value still
+     * submits with the form unless `dehydrated(false)` is also set — the
+     * Ahram idiom `->readOnly()->dehydrated()` for computed totals.
+     */
+    public function readOnly(bool $condition = true): static
+    {
+        $this->isReadOnly = $condition;
+
+        return $this;
+    }
+
+    /**
+     * Whether the field's value is included in the form data on submit.
+     * `dehydrated(false)` keeps the field rendered but excludes its value
+     * from the payload and from validation — the Ahram idiom for computed
+     * read-only numbers that are shown but never saved.
+     */
+    public function dehydrated(bool $condition = true): static
+    {
+        $this->isDehydrated = $condition;
+
+        return $this;
+    }
+
+    /**
+     * Hide this field only for the named operations ('create' | 'edit' |
+     * 'view'), mirroring Filament's `hiddenOn(Operation::Create)`. The
+     * operation flows from the serializing context — the resource page or
+     * the modal action's type — so one shared form renders differently per
+     * operation with no client-side branching (slice C6).
+     *
+     * @param  string|array<int, string>  $operations
+     */
+    public function hiddenOn(string|array $operations): static
+    {
+        $this->hiddenOn = Arr::wrap($operations);
+
+        return $this;
+    }
+
+    /**
+     * Disable this field only for the named operations ('create' | 'edit' |
+     * 'view'), mirroring Filament's `disabledOn(Operation::Edit)`.
+     *
+     * @param  string|array<int, string>  $operations
+     */
+    public function disabledOn(string|array $operations): static
+    {
+        $this->disabledOn = Arr::wrap($operations);
 
         return $this;
     }
@@ -181,13 +355,43 @@ abstract class Component
     }
 
     /**
-     * @param  array<string, string>  $options
+     * The value => label options map (or a backed enum to derive it from —
+     * `Select::make('status')->options(DemoStatus::class)`, mirroring
+     * Filament's `Select::options(SomeEnum::class)`).
+     *
+     * @param  array<string, string>|class-string<BackedEnum>|BackedEnum  $options
      */
-    public function options(array $options): static
+    public function options(array|string|BackedEnum $options): static
     {
-        $this->options = $options;
+        $this->options = is_array($options) ? $options : $this->enumToOptions($options);
 
         return $this;
+    }
+
+    /**
+     * Convert a backed enum (class name or instance) to the value => label
+     * options map. Labels come from the enum's `getLabel()` when it declares
+     * one (Filament's HasLabel contract), falling back to the humanized case
+     * name.
+     *
+     * @param  class-string<BackedEnum>|BackedEnum  $enum
+     * @return array<string, string>
+     */
+    protected function enumToOptions(string|BackedEnum $enum): array
+    {
+        $class = $enum instanceof BackedEnum ? $enum::class : $enum;
+
+        if (! is_subclass_of($class, BackedEnum::class)) {
+            throw new LogicException('options() expects a backed enum class or an array of value => label options.');
+        }
+
+        $options = [];
+
+        foreach ($class::cases() as $case) {
+            $options[(string) $case->value] = method_exists($class, 'getLabel') ? (string) $case->getLabel() : Str::headline($case->name); // @phpstan-ignore method.notFound
+        }
+
+        return $options;
     }
 
     /**
@@ -267,14 +471,16 @@ abstract class Component
         return $this->record;
     }
 
-    public function getDefault(): int|string|bool|null
+    public function getDefault(): int|string|bool|float|null
     {
         return $this->default;
     }
 
     public function getLabel(): string
     {
-        return $this->label ?? Str::headline((string) $this->name);
+        $label = $this->label ?? Str::headline((string) $this->name);
+
+        return $this->shouldTranslateLabel ? __($label) : $label;
     }
 
     public function isRequired(): bool
@@ -285,6 +491,16 @@ abstract class Component
     public function isDisabled(): bool
     {
         return $this->isDisabled;
+    }
+
+    public function isReadOnly(): bool
+    {
+        return $this->isReadOnly;
+    }
+
+    public function isDehydrated(): bool
+    {
+        return $this->isDehydrated;
     }
 
     public function isHidden(): bool
@@ -303,11 +519,35 @@ abstract class Component
     }
 
     /**
+     * Whether the field is hidden for the given operation — a global hidden()
+     * or a `hiddenOn()` match. With no operation (null), only the global flag
+     * counts.
+     */
+    public function isHiddenFor(?string $operation): bool
+    {
+        return $this->isHidden() || ($operation !== null && in_array($operation, $this->hiddenOn, true));
+    }
+
+    /**
+     * Whether the field is disabled for the given operation — a global
+     * disabled() or a `disabledOn()` match.
+     */
+    public function isDisabledFor(?string $operation): bool
+    {
+        return $this->isDisabled() || ($operation !== null && in_array($operation, $this->disabledOn, true));
+    }
+
+    public function isVisibleFor(?string $operation): bool
+    {
+        return ! $this->isHiddenFor($operation);
+    }
+
+    /**
      * Serialize the component to its JSON contract node (docs/CONTRACT.md).
      *
      * @return array<string, mixed>
      */
-    public function toArray(): array
+    public function toArray(?string $operation = null): array
     {
         return $this->filterNullValues([
             'type' => $this->getType(),
@@ -315,6 +555,11 @@ abstract class Component
             'label' => $this->getLabel(),
             'placeholder' => $this->placeholder,
             'helperText' => $this->helperText,
+            'hint' => $this->hint,
+            'hintIcon' => $this->hintIcon,
+            'hintActions' => $this->hintActions !== []
+                ? array_map(static fn (Action $action): array => $action->toArray(), $this->hintActions)
+                : null,
             'default' => $this->default,
             'required' => $this->isRequired() ? true : null,
             'validation' => $this->validation !== [] ? $this->validation : null,
@@ -322,7 +567,10 @@ abstract class Component
             'dependsOn' => $this->dependsOn,
             'whenTruthy' => $this->whenTruthy,
             'whenFalsy' => $this->whenFalsy,
-            'disabled' => $this->isDisabled() ? true : null,
+            'hidden' => $this->isHiddenFor($operation) ? true : null,
+            'disabled' => $this->isDisabledFor($operation) ? true : null,
+            'readOnly' => $this->isReadOnly() ? true : null,
+            'dehydrated' => $this->isDehydrated() ? null : false,
             'autofocus' => $this->isAutofocused() ? true : null,
             'maxLength' => $this->maxLength,
             'columnSpan' => $this->columnSpan,

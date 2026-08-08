@@ -20,7 +20,7 @@ class MakeResourceCommand extends Command
     /**
      * The command description.
      */
-    protected $description = 'Create a new Refilament resource class';
+    protected $description = 'Create a new Refilament resource class and its table/form classes';
 
     /**
      * Execute the console command.
@@ -33,16 +33,27 @@ class MakeResourceCommand extends Command
         /** @var class-string<Model> $model */
         $model = $this->option('model') ?? 'App\\Models\\'.$name;
 
-        $path = (string) config('refilament.resources.path', app_path('Refilament/Resources'));
-        $namespace = (string) config('refilament.resources.namespace', 'App\\Refilament\\Resources');
+        $resourcesPath = (string) config('refilament.resources.path', app_path('Refilament/Resources'));
+        $resourcesNamespace = (string) config('refilament.resources.namespace', 'App\\Refilament\\Resources');
 
-        $file = $path.'/'.$className.'.php';
+        // Self-contained per-resource directory (mirrors Filament): the plural
+        // resource folder holds the thin resource class plus its Schemas/ and
+        // Tables/ subdirectories, so each resource is expandable independently
+        // (Pages/, RelationManagers/, Actions/, Widgets/ slot in later).
+        $plural = Str::pluralStudly($name);
+        $basePath = $resourcesPath.'/'.$plural;
+        $baseNamespace = $resourcesNamespace.'\\'.$plural;
 
-        if ($filesystem->exists($file) && ! $this->option('force')) {
-            $this->components->error("{$className} already exists.");
+        $resourceFile = $basePath.'/'.$className.'.php';
+        $schemaDir = $basePath.'/Schemas';
+        $tableDir = $basePath.'/Tables';
+        $schemaFile = $schemaDir.'/'.$name.'Form.php';
+        $tableFile = $tableDir.'/'.$plural.'Table.php';
 
-            return self::FAILURE;
-        }
+        // The resolved ids for the generated classes — the resource's derived
+        // defaults unless a resource of the same id is already registered.
+        $tableId = Str::kebab($name);
+        $formId = $tableId.'-form';
 
         if (! class_exists($model)) {
             $this->components->error("Model [{$model}] does not exist.");
@@ -50,32 +61,65 @@ class MakeResourceCommand extends Command
             return self::FAILURE;
         }
 
+        foreach ([$resourceFile, $schemaFile, $tableFile] as $file) {
+            if ($filesystem->exists($file) && ! $this->option('force')) {
+                $this->components->error("{$file} already exists.");
+
+                return self::FAILURE;
+            }
+        }
+
         [$tableBody, $formBody] = $this->option('generate')
             ? $this->generateBodies($model)
             : [self::tablePlaceholder(), self::formPlaceholder()];
 
-        // The stub embeds the bodies one level past the `->columns([` /
+        // The stubs embed the bodies one level past the `->columns([` /
         // `->components([` chain lines (12 spaces + 4) — indent every line
-        // so the generated file is pint-clean out of the box.
+        // so the generated files are pint-clean out of the box.
         $tableBody = $this->indent($tableBody, 16);
         $formBody = $this->indent($formBody, 16);
 
-        $filesystem->ensureDirectoryExists($path);
+        $filesystem->ensureDirectoryExists($schemaDir);
+        $filesystem->ensureDirectoryExists($tableDir);
 
-        $stub = $filesystem->get(__DIR__.'/../../stubs/resource.stub');
+        $resourceStub = $filesystem->get(__DIR__.'/../../stubs/resource.stub');
+        $schemaStub = $filesystem->get(__DIR__.'/../../stubs/schema.stub');
+        $tableStub = $filesystem->get(__DIR__.'/../../stubs/table.stub');
 
-        $filesystem->put($file, str_replace(
-            ['{{ namespace }}', '{{ class }}', '{{ modelImport }}', '{{ modelShort }}', '{{ tableBody }}', '{{ formBody }}'],
-            [$namespace, $className, $model, Str::afterLast($model, '\\'), $tableBody, $formBody],
-            $stub,
+        $filesystem->put($resourceFile, str_replace(
+            [
+                '{{ namespace }}', '{{ class }}',
+                '{{ schemaFqn }}', '{{ tableFqn }}',
+                '{{ schemaShort }}', '{{ tableShort }}',
+                '{{ modelImport }}', '{{ modelShort }}',
+            ],
+            [
+                $baseNamespace, $className,
+                "{$baseNamespace}\\Schemas\\{$name}Form", "{$baseNamespace}\\Tables\\{$plural}Table",
+                "{$name}Form", "{$plural}Table",
+                $model, Str::afterLast($model, '\\'),
+            ],
+            $resourceStub,
         ));
 
-        $this->components->info("{$className} created at {$file}.");
+        $filesystem->put($schemaFile, str_replace(
+            ['{{ namespace }}', '{{ class }}', '{{ formId }}', '{{ body }}'],
+            ["{$baseNamespace}\\Schemas", "{$name}Form", $formId, $formBody],
+            $schemaStub,
+        ));
+
+        $filesystem->put($tableFile, str_replace(
+            ['{{ namespace }}', '{{ class }}', '{{ tableId }}', '{{ body }}', '{{ modelImport }}', '{{ modelShort }}'],
+            ["{$baseNamespace}\\Tables", "{$plural}Table", $tableId, $tableBody, $model, Str::afterLast($model, '\\')],
+            $tableStub,
+        ));
+
+        $this->components->info("{$className} created at {$resourceFile}.");
 
         if ($this->option('generate')) {
-            $this->components->info('Generated columns and fields from the model table — customize the resource before shipping.');
+            $this->components->info('Generated columns and fields from the model table — customize the generated files before shipping.');
         } else {
-            $this->components->info('Define columns and fields in the generated table() and form() methods.');
+            $this->components->info('Define columns and fields in the generated table() and form() classes.');
         }
 
         return self::SUCCESS;

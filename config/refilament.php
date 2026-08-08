@@ -39,12 +39,41 @@ return [
     'panel' => [
         'id' => 'refilament',
         'brand_name' => 'Refilament',
+        /*
+        | A brand logo URL rendered beside the brand name in the shell (or a
+        | closure returning one). Null renders the default mark.
+        */
+        'brand_logo' => null,
+        /*
+        | Render the navigation in a top bar instead of the sidebar
+        | (mirrors Filament's topNavigation()).
+        */
+        'top_navigation' => false,
         'dashboard_url' => '/refilament',
         'colors' => [
             'primary' => '#6366f1',
             'primary_foreground' => '#ffffff',
         ],
         'widgets' => [],
+
+        /*
+        |--------------------------------------------------------------------------
+        | Standalone pages (slice 1.9 "->pages([...])")
+        |--------------------------------------------------------------------------
+        |
+        | `pages` is an explicit list of standalone panel page classes (pages
+        | not tied to a resource, extending the Panel\Pages base) to register.
+        | `pages_path`/`pages_namespace` auto-discovery registers every
+        | non-abstract page class in the folder, mirroring Filament's
+        | `discoverPages()`. Each page is served through the shared
+        | PanelPageController route at /refilament/{slug}; pages that opt in
+        | via shouldRegisterNavigation() also appear in the sidebar.
+        |
+        */
+
+        'pages' => [],
+        'pages_path' => app_path('Refilament/Pages'),
+        'pages_namespace' => 'App\\Refilament\\Pages',
 
         /*
         |--------------------------------------------------------------------------

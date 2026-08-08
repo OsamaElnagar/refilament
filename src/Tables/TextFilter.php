@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Refilament\Refilament\Tables;
 
+use Illuminate\Support\Traits\Macroable;
+use Refilament\Refilament\Support\Concerns\CanBeConfigured;
+
 /**
  * Free-text column filter.
  *
@@ -14,13 +17,21 @@ namespace Refilament\Refilament\Tables;
  */
 class TextFilter
 {
+    use CanBeConfigured;
+    use Macroable;
+
     protected ?string $label = null;
+
+    protected bool $shouldTranslateLabel = false;
 
     protected ?string $attribute = null;
 
     protected ?string $placeholder = null;
 
-    final public function __construct(protected ?string $name = null) {}
+    final public function __construct(protected ?string $name = null)
+    {
+        $this->configure();
+    }
 
     public static function make(?string $name = null): static
     {
@@ -30,6 +41,18 @@ class TextFilter
     public function label(?string $label): static
     {
         $this->label = $label;
+
+        return $this;
+    }
+
+    /**
+     * Treat the filter label as a translation key resolved through the app's
+     * translator when the filter is serialized. Mirrors Filament's
+     * `translateLabel()`; off by default so labels pass through verbatim.
+     */
+    public function translateLabel(bool $condition = true): static
+    {
+        $this->shouldTranslateLabel = $condition;
 
         return $this;
     }
@@ -58,7 +81,9 @@ class TextFilter
 
     public function getLabel(): string
     {
-        return $this->label ?? (string) $this->name;
+        $label = $this->label ?? (string) $this->name;
+
+        return $this->shouldTranslateLabel ? __($label) : $label;
     }
 
     public function getAttribute(): string

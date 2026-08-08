@@ -43,15 +43,17 @@ class Tab extends Layout
 
     public function getLabel(): string
     {
-        return $this->label ?? '';
+        $label = $this->label ?? '';
+
+        return $this->shouldTranslateLabel ? __($label) : $label;
     }
 
-    public function toArray(): array
+    public function toArray(?string $operation = null): array
     {
         return $this->filterNullValues([
             'type' => $this->getType(),
             'label' => $this->label,
-            'schema' => $this->serializeChildren(),
+            'schema' => $this->serializeChildren($operation),
         ]);
     }
 }

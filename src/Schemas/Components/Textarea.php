@@ -37,10 +37,10 @@ class Textarea extends Component
         return $this->rows;
     }
 
-    public function toArray(): array
+    public function toArray(?string $operation = null): array
     {
         return $this->filterNullValues([
-            ...parent::toArray(),
+            ...parent::toArray($operation),
             'rows' => $this->rows,
         ]);
     }

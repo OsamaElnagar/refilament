@@ -28,7 +28,8 @@ class ForceDeleteBulkAction extends BulkAction
     {
         $action = parent::make($name);
 
-        $action->label('Force delete selected');
+        $action->label('refilament::actions.force-delete.multiple.label')
+            ->translateLabel();
         $action->color('danger');
         $action->requiresConfirmation();
         $action->successMessage('Selected posts permanently deleted.');

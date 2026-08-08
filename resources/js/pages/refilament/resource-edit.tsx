@@ -131,6 +131,7 @@ export default function ResourceEdit(props: ResourceEditProps) {
                             submitUrl={`/refilament/table/${props.resource}/record/${props.record}`}
                             submitRecord={props.record}
                             submitRecordInUrl
+                            operation="edit"
                             onSuccess={() => router.visit(`/refilament/${props.resource}`)}
                         />
                     </Card>

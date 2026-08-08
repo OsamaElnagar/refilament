@@ -51,7 +51,7 @@ export default function RadioField({ node, value, error, onChange }: FieldProps)
                                         value={option.value}
                                         checked={selected === option.value}
                                         onChange={() => onChange?.(option.value)}
-                                        disabled={node.disabled ?? false}
+                                        disabled={node.disabled ?? node.readOnly ?? false}
                                         aria-invalid={error ? true : undefined}
                                         className="size-4 accent-primary"
                                     />
@@ -77,7 +77,7 @@ export default function RadioField({ node, value, error, onChange }: FieldProps)
                                     value={option.value}
                                     checked={selected === option.value}
                                     onChange={() => onChange?.(option.value)}
-                                    disabled={node.disabled ?? false}
+                                    disabled={node.disabled ?? node.readOnly ?? false}
                                     aria-invalid={error ? true : undefined}
                                     className="size-4 accent-primary"
                                 />

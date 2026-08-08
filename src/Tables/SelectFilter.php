@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Refilament\Refilament\Tables;
 
+use Illuminate\Support\Traits\Macroable;
+use Refilament\Refilament\Support\Concerns\CanBeConfigured;
+
 /**
  * Discrete column filter (slice 8).
  *
@@ -17,7 +20,12 @@ namespace Refilament\Refilament\Tables;
  */
 class SelectFilter
 {
+    use CanBeConfigured;
+    use Macroable;
+
     protected ?string $label = null;
+
+    protected bool $shouldTranslateLabel = false;
 
     protected ?string $attribute = null;
 
@@ -26,7 +34,10 @@ class SelectFilter
 
     protected bool $multiple = false;
 
-    final public function __construct(protected ?string $name = null) {}
+    final public function __construct(protected ?string $name = null)
+    {
+        $this->configure();
+    }
 
     public static function make(?string $name = null): static
     {
@@ -36,6 +47,18 @@ class SelectFilter
     public function label(?string $label): static
     {
         $this->label = $label;
+
+        return $this;
+    }
+
+    /**
+     * Treat the filter label as a translation key resolved through the app's
+     * translator when the filter is serialized. Mirrors Filament's
+     * `translateLabel()`; off by default so labels pass through verbatim.
+     */
+    public function translateLabel(bool $condition = true): static
+    {
+        $this->shouldTranslateLabel = $condition;
 
         return $this;
     }
@@ -78,7 +101,9 @@ class SelectFilter
 
     public function getLabel(): string
     {
-        return $this->label ?? (string) $this->name;
+        $label = $this->label ?? (string) $this->name;
+
+        return $this->shouldTranslateLabel ? __($label) : $label;
     }
 
     public function getAttribute(): string

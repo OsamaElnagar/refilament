@@ -9,6 +9,7 @@ use Refilament\Refilament\Resources\Pages\PageRegistration;
 use Refilament\Refilament\Resources\RelationManagers\RelationManager;
 use Refilament\Refilament\Resources\Resource;
 use Refilament\Refilament\Schemas\Schema;
+use Refilament\Refilament\Tables\Action;
 use Refilament\Refilament\Tables\Table;
 use Workbench\App\Models\Post;
 use Workbench\App\Refilament\Resources\Pages\PostStats;
@@ -32,6 +33,49 @@ class PostResource extends Resource
     protected static ?string $tableId = 'posts';
 
     protected static ?string $formId = 'post-form';
+
+    // The model attribute that headlines a post in global search results
+    // (slice 3.5). Falls back to the table's searchable columns otherwise.
+    protected static ?string $recordTitleAttribute = 'title';
+
+    /**
+     * A demo of the global search override points (slice 3.5): every result
+     * for a post shows a status detail line, and archived posts drop below
+     * live ones in the result ordering via a lighter global search sort.
+     *
+     * @return array<string, string>
+     */
+    public static function getGlobalSearchResultDetails(mixed $record): array
+    {
+        return [
+            'status' => (string) $record->getAttribute('status'),
+        ];
+    }
+
+    /**
+     * Result actions (slice 3.5) — the default edit link, now carrying an
+     * icon and tooltip so the search dialog's buttons render them (the last
+     * 3.5 deferral). The canEdit gate is preserved from the parent default.
+     *
+     * @return array<int, Action>
+     */
+    public static function getGlobalSearchResultActions(mixed $record): array
+    {
+        if (! static::canEdit($record)) {
+            return [];
+        }
+
+        return [
+            Action::make('edit')
+                ->label('Edit')
+                ->icon('pencil')
+                ->tooltip('Edit this post')
+                ->url(route('refilament.resource.edit', [
+                    'resource' => static::getTableId(),
+                    'record' => $record->getKey(),
+                ])),
+        ];
+    }
 
     public static function table(Table $table): Table
     {

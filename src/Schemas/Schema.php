@@ -6,13 +6,18 @@ namespace Refilament\Refilament\Schemas;
 
 use Closure;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Traits\Macroable;
 use LogicException;
 use Refilament\Refilament\Notifications\Notification;
 use Refilament\Refilament\Schemas\Components\Component;
 use Refilament\Refilament\Schemas\Components\Layout;
+use Refilament\Refilament\Support\Concerns\CanBeConfigured;
 
 class Schema
 {
+    use CanBeConfigured;
+    use Macroable;
+
     /**
      * Version of the JSON contract this package emits (docs/CONTRACT.md).
      */
@@ -57,6 +62,11 @@ class Schema
     protected ?Notification $successNotification = null;
 
     protected ?Notification $updateSuccessNotification = null;
+
+    public function __construct()
+    {
+        $this->configure();
+    }
 
     /**
      * The id clients use to address this schema document when calling typed
@@ -162,7 +172,7 @@ class Schema
      * document endpoint, so a modal form and the full-page create form
      * always present the same values (docs/CONTRACT.md, "Modal actions").
      *
-     * @return array<string, int|string|bool|null>
+     * @return array<string, int|string|bool|float|null>
      */
     public function initialData(): array
     {
@@ -322,18 +332,19 @@ class Schema
     /**
      * The Laravel validation rules map for this schema document, keyed by
      * field name (docs/CONTRACT.md, "Validation"). Collected from every
-     * field in the tree; hidden fields never validate.
+     * field in the tree; hidden fields and `dehydrated(false)` fields (slice
+     * C4 — shown but never submitted) never validate.
      *
      * @return array<string, array<int, string>>
      */
-    public function getValidationRules(): array
+    public function getValidationRules(?string $operation = null): array
     {
         $rules = [];
 
         foreach ($this->getComponentsRecursively() as $component) {
             $name = $component->getName();
 
-            if ($name === null || ! $component->isVisible()) {
+            if ($name === null || ! $component->isVisibleFor($operation) || ! $component->isDehydrated()) {
                 continue;
             }
 
@@ -374,12 +385,12 @@ class Schema
      *
      * @return array{id?: string, contract: int, schema: array<int, array<string, mixed>>}
      */
-    public function toArray(): array
+    public function toArray(?string $operation = null): array
     {
         $payload = [
             'contract' => self::CONTRACT_VERSION,
             'schema' => array_map(
-                static fn (Component $component): array => $component->toArray(),
+                static fn (Component $component): array => $component->toArray($operation),
                 $this->components,
             ),
         ];

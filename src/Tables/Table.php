@@ -8,7 +8,12 @@ use Illuminate\Contracts\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Str;
+use Illuminate\Support\Traits\Macroable;
 use LogicException;
+use Refilament\Refilament\Support\Concerns\CanBeConfigured;
+use Refilament\Refilament\Support\RelationshipOrderer;
 use Refilament\Refilament\Tables\Summarizers\Summarizer;
 
 /**
@@ -22,9 +27,14 @@ use Refilament\Refilament\Tables\Summarizers\Summarizer;
  */
 class Table
 {
+    use CanBeConfigured;
+    use Macroable;
+
     protected ?string $id = null;
 
     protected ?string $heading = null;
+
+    protected bool $shouldTranslateHeading = false;
 
     /** @var array<int, Column> */
     protected array $columns = [];
@@ -71,7 +81,10 @@ class Table
 
     protected ?EloquentBuilder $query = null;
 
-    final public function __construct(protected ?string $name = null) {}
+    final public function __construct(protected ?string $name = null)
+    {
+        $this->configure();
+    }
 
     public static function make(?string $name = null): static
     {
@@ -92,6 +105,18 @@ class Table
     public function heading(?string $heading): static
     {
         $this->heading = $heading;
+
+        return $this;
+    }
+
+    /**
+     * Treat the table heading as a translation key resolved through the app's
+     * translator when the table is serialized. Mirrors Filament's
+     * `translateHeading()`; off by default so headings pass through verbatim.
+     */
+    public function translateHeading(bool $condition = true): static
+    {
+        $this->shouldTranslateHeading = $condition;
 
         return $this;
     }
@@ -278,7 +303,11 @@ class Table
 
     public function getHeading(): ?string
     {
-        return $this->heading;
+        if ($this->heading === null) {
+            return null;
+        }
+
+        return $this->shouldTranslateHeading ? __($this->heading) : $this->heading;
     }
 
     /**
@@ -445,7 +474,7 @@ class Table
         }
 
         if ($this->heading !== null) {
-            $payload['heading'] = $this->heading;
+            $payload['heading'] = $this->getHeading();
         }
 
         if ($this->filters !== []) {
@@ -457,11 +486,33 @@ class Table
         }
 
         if ($this->headerActions !== []) {
-            $payload['headerActions'] = array_map(static fn (Action $action): array => $action->toArray(), $this->headerActions);
+            // Authorization gate (slice 4.1): header actions the current user
+            // may not run are omitted from the payload entirely — they neither
+            // render nor stay reachable (the action endpoints re-check
+            // isAuthorized() defensively). Row actions stay defined at the
+            // table level; their per-record authorization is evaluated when
+            // rows serialize (serializeRecord).
+            $headerActions = array_values(array_filter(
+                $this->headerActions,
+                static fn (Action $action): bool => $action->isAuthorized(),
+            ));
+
+            if ($headerActions !== []) {
+                $payload['headerActions'] = array_map(static fn (Action $action): array => $action->toArray(), $headerActions);
+            }
         }
 
         if ($this->toolbarActions !== []) {
-            $payload['toolbarActions'] = array_map(static fn (BulkAction $action): array => $action->toArray(), $this->toolbarActions);
+            // Toolbar (bulk) actions are gated the same way — an unauthorized
+            // bulk action never reaches the client (slice 4.1).
+            $toolbarActions = array_values(array_filter(
+                $this->toolbarActions,
+                static fn (BulkAction $action): bool => $action->isAuthorized(),
+            ));
+
+            if ($toolbarActions !== []) {
+                $payload['toolbarActions'] = array_map(static fn (BulkAction $action): array => $action->toArray(), $toolbarActions);
+            }
         }
 
         if ($this->groups !== []) {
@@ -609,7 +660,14 @@ class Table
             $columnName = (string) $column->getName();
 
             foreach ($groupKeys as $groupKey) {
-                $scoped = (clone $query)->where($groupColumn, $groupKey);
+                $scoped = clone $query;
+
+                // A date group's key is `Y-m-d`, but the column may store a
+                // full timestamp — scope with `whereDate` so subtotals line up
+                // with the same-day runs the key describes.
+                $scoped = $group->isDate()
+                    ? $scoped->whereDate($groupColumn, $groupKey)
+                    : $scoped->where($groupColumn, $groupKey);
 
                 $summaries[$groupKey][$columnName] = array_map(
                     static fn (Summarizer $summarizer): array => [
@@ -663,6 +721,23 @@ class Table
 
         return $query->where(function (EloquentBuilder $builder) use ($search, $searchableColumns): void {
             foreach ($searchableColumns as $column) {
+                // A relationship (dot-notation) column matches via Eloquent's
+                // native `orWhereRelation`, which constrains the related table
+                // through the relationship itself — no manual join needed
+                // (Slice 2.1). Plain columns match with a straight LIKE.
+                $relationshipName = $column->getRelationshipName();
+
+                if ($relationshipName !== null) {
+                    $builder->orWhereRelation(
+                        $relationshipName,
+                        (string) $column->getAttributeName(),
+                        'like',
+                        '%'.$search.'%',
+                    );
+
+                    continue;
+                }
+
                 $builder->orWhere($column->getName(), 'like', '%'.$search.'%');
             }
         });
@@ -751,6 +826,8 @@ class Table
         // supplies both its column and its direction when none is requested.
         $direction = $sort !== null ? $direction : $this->getDefaultSortDirection();
 
+        $orderColumn = $this->resolveOrderColumnName($query, $column);
+
         // reorder() makes the requested ordering authoritative, replacing any
         // ordering baked into the table's query() rather than demoting it to
         // a tiebreaker (SQL applies ORDER BY left-to-right). Record grouping
@@ -761,9 +838,9 @@ class Table
         // run headers contiguous instead of fragmented by a pre-existing sort.
         if ($group !== null) {
             $query = $query->reorder($group);
-            $query = $column !== $group ? $query->orderBy($column, $direction === 'desc' ? 'desc' : 'asc') : $query;
+            $query = $column !== $group ? $query->orderBy($orderColumn, $direction === 'desc' ? 'desc' : 'asc') : $query;
         } else {
-            $query = $query->reorder($column, $direction === 'desc' ? 'desc' : 'asc');
+            $query = $query->reorder($orderColumn, $direction === 'desc' ? 'desc' : 'asc');
         }
 
         // Deterministic tiebreaker so pagination never shuffles between
@@ -773,6 +850,24 @@ class Table
         }
 
         return $query;
+    }
+
+    /**
+     * Resolve the SQL expression to ORDER BY for a sort column. A plain column
+     * is its unqualified name; a relationship (dot-notation) column is a
+     * correlated subquery selecting the related attribute, so the sort never
+     * needs a join that could duplicate parent rows (Slice 2.1).
+     */
+    protected function resolveOrderColumnName(EloquentBuilder $query, string $column): string|Builder
+    {
+        if (! str_contains($column, '.')) {
+            return $column;
+        }
+
+        $relationshipName = Str::beforeLast($column, '.');
+        $attribute = Str::afterLast($column, '.');
+
+        return app(RelationshipOrderer::class)->buildSubquery($query, $relationshipName, $attribute);
     }
 
     /**
@@ -820,19 +915,26 @@ class Table
     /**
      * A record's display label for a group header — the value of the grouping
      * column, passed through that column's formatter when one exists (so an
-     * enum/badge/date column groups under its human value), else the raw
-     * value.
+     * enum/badge/date column groups under its human value). A custom group
+     * title closure wins over the column formatter; a date group without a
+     * matching column formatter renders its key as a human date.
      */
     protected function formatGroupTitle(string $column, mixed $record): string
     {
+        $group = isset($this->groups[$column]) ? $this->groups[$column] : null;
+
+        if ($group?->hasTitleFromRecordUsing() !== null) {
+            return $group->getTitleFor($record);
+        }
+
         foreach ($this->columns as $compiled) {
             if ($compiled->getName() === $column) {
                 return (string) $compiled->getStateFor($record);
             }
         }
 
-        if (isset($this->groups[$column])) {
-            return (string) $this->groups[$column]->getKeyFor($record);
+        if ($group !== null) {
+            return $group->getTitleFor($record);
         }
 
         return (string) $record->getAttribute($column);

@@ -1,4 +1,5 @@
 import CheckboxField from '@/schemas/fields/checkbox-field';
+import CheckboxListField from '@/schemas/fields/checkbox-list-field';
 import RadioField from '@/schemas/fields/radio-field';
 import SelectField from '@/schemas/fields/select-field';
 import TextareaField from '@/schemas/fields/textarea-field';
@@ -18,4 +19,5 @@ export function registerDefaultFields(): void {
     registerField('checkbox', CheckboxField);
     registerField('toggle', ToggleField);
     registerField('radio', RadioField);
+    registerField('checkbox_list', CheckboxListField);
 }

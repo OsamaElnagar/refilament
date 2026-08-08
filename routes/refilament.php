@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Route;
 use Refilament\Refilament\Http\Controllers\DashboardController;
+use Refilament\Refilament\Http\Controllers\DatabaseNotificationsController;
+use Refilament\Refilament\Http\Controllers\GlobalSearchActionController;
+use Refilament\Refilament\Http\Controllers\GlobalSearchController;
 use Refilament\Refilament\Http\Controllers\RelationManagerController;
 use Refilament\Refilament\Http\Controllers\SchemaDocumentController;
 use Refilament\Refilament\Http\Controllers\SchemaOptionsController;
 use Refilament\Refilament\Http\Controllers\SchemaSubmitController;
 use Refilament\Refilament\Http\Controllers\SchemaValidationController;
 use Refilament\Refilament\Http\Controllers\TableController;
+use Refilament\Refilament\Http\Controllers\WidgetDataController;
 use Refilament\Refilament\Http\Middleware\Authenticate as PanelAuthenticate;
 
 // The dashboard (slice 1.9): GET /refilament renders the panel's registered
@@ -19,11 +23,22 @@ use Refilament\Refilament\Http\Middleware\Authenticate as PanelAuthenticate;
 // (Authenticate reads refilament.panel.auth_middleware per request and passes
 // through when the gate isn't enabled); the API endpoints below are not gated —
 // they are reachable only from a rendered shell page.
-use Refilament\Refilament\Http\Middleware\Authenticate as PanelAuthenticate;
 
 Route::get('refilament', [DashboardController::class, '__invoke'])
     ->middleware([PanelAuthenticate::class])
     ->name('refilament.dashboard');
+
+Route::get('refilament/search', [GlobalSearchController::class, '__invoke'])
+    ->name('refilament.global-search');
+
+Route::post('refilament/search/{resource}/action/{action}', [GlobalSearchActionController::class, '__invoke'])
+    ->name('refilament.global-search.action');
+
+// The typed widget data endpoint (slice 3.2): chart widgets that opt into
+// polling/filters refetch here — the widget is rebuilt from its registered
+// resolver per request, so no state survives between requests.
+Route::get('refilament/widget/{widget}/data', [WidgetDataController::class, '__invoke'])
+    ->name('refilament.widget.data');
 
 Route::get('refilament/schema/{schema}', [SchemaDocumentController::class, 'show'])
     ->name('refilament.schema.document');
@@ -60,3 +75,14 @@ Route::post('refilament/relation/{resource}/{record}/{relation}/action/{action}'
 
 Route::get('refilament/relation/{resource}/{record}/{relation}/record/{item}', [RelationManagerController::class, 'record'])
     ->name('refilament.relation.record');
+
+// The database-notifications bell (slice B3): the shell polls the index for
+// the unread count and latest rows, and POSTs to mark notifications read.
+Route::get('refilament/notifications', [DatabaseNotificationsController::class, 'index'])
+    ->name('refilament.notifications.index');
+
+Route::post('refilament/notifications/read-all', [DatabaseNotificationsController::class, 'markAllRead'])
+    ->name('refilament.notifications.read-all');
+
+Route::post('refilament/notifications/{notification}/read', [DatabaseNotificationsController::class, 'markRead'])
+    ->name('refilament.notifications.read');

@@ -162,7 +162,7 @@ class TableController
             // Uniqueness rules ignore the record being edited — a record
             // never rejects its own values (Laravel's unique rule would
             // otherwise fail an unchanged slug against itself).
-            $data = $this->validateSchemaData($schema, $data, (string) $record->getKey());
+            $data = $this->validateSchemaData($schema, $data, (string) $record->getKey(), 'edit');
         }
 
         try {
@@ -215,6 +215,14 @@ class TableController
             return response()->json(['error' => 'Unknown action.'], JsonResponse::HTTP_NOT_FOUND);
         }
 
+        // General authorization gate (slice 4.1): a bulk action the current
+        // user may not run is refused even when a client still sends it. The
+        // table serialization already omits unauthorized bulk actions, so this
+        // is the authoritative server-side re-check.
+        if (! $actionInstance->isAuthorized()) {
+            return response()->json(['error' => 'Action is not available.'], JsonResponse::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
         $keys = array_map('strval', $request->input('records'));
         $records = $resolved->findRecords($keys);
 
@@ -223,6 +231,11 @@ class TableController
         if (count($records) !== count($keys)) {
             return response()->json(['error' => 'Some selected records were not found.'], JsonResponse::HTTP_NOT_FOUND);
         }
+
+        // Per-record authorization (slice 4.1): when the bulk action declares
+        // authorizeIndividualRecords(), records the current user cannot act on
+        // are filtered out before the closure runs.
+        $records = $actionInstance->filterRecords($records);
 
         try {
             $actionInstance->call($records);
@@ -297,7 +310,7 @@ class TableController
         // Uniqueness rules ignore the record being edited — a record never
         // rejects its own values (Laravel's unique rule would otherwise fail
         // an unchanged slug against itself).
-        $validated = $this->validateSchemaData($schema, $data, (string) $model->getKey());
+        $validated = $this->validateSchemaData($schema, $data, (string) $model->getKey(), 'edit');
 
         try {
             $schema->update($model, $validated);
