@@ -363,9 +363,17 @@ class Refilament
      */
     public function registerRoutes(): static
     {
-        RouteFacade::prefix($this->panel()->getPath())->group(static function (): void {
-            require __DIR__.'/../routes/refilament.php';
-        });
+        // The whole route group mounts inside the framework's `web` middleware
+        // group (mirroring Filament's `->hasRoutes('web')`), so every panel
+        // route gets sessions + CSRF + SubstituteBindings for free — the
+        // shell's CSRF-bearing POSTs validate against a real session, and the
+        // panel's own `->middleware()` list in the routes file still appends
+        // after the group.
+        RouteFacade::middleware(['web'])
+            ->prefix($this->panel()->getPath())
+            ->group(static function (): void {
+                require __DIR__.'/../routes/refilament.php';
+            });
 
         return $this;
     }
@@ -499,7 +507,8 @@ class Refilament
             // panel's path (like every other panel route) and after the
             // resource routes above, so it can't shadow the exact-path
             // dashboard or collide with a discovered resource id.
-            RouteFacade::prefix($this->panel()->getPath())
+            RouteFacade::middleware(['web'])
+                ->prefix($this->panel()->getPath())
                 ->middleware([...$this->panel()->getMiddleware(), PanelAuthenticate::class])
                 ->group(static function () use ($pageSlugs): void {
                     RouteFacade::get('{page}', [PanelPageController::class, 'show'])

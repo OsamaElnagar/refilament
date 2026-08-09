@@ -94,7 +94,7 @@ class RefilamentPanelProvider extends PanelProvider
             ->path('admin')                             // the panel's URL prefix
             ->brandName('My App')
             ->colors(['primary' => '#e11d48'])
-            // ->middleware(['web'])                    // sessions + CSRF on the panel's routes
+            // ->middleware([MyMiddleware::class])     // extra middleware (the `web` group is always on)
             // ->authMiddleware([Authenticate::class])  // turn the access gate on
             // ->loginUrl('/login')
             // ->widgets([StatsOverview::class])
@@ -206,12 +206,12 @@ matrix, `vendor:publish` consumer smoke test) — plus the deferred items listed
 
 **Known beta limitations (deliberate, tracked in the roadmap):**
 
-- **Panel routes are not in the `web` middleware group by default.** A fresh panel has no session,
-  no CSRF enforcement, and no Inertia version header — the panel works, but in-app Inertia
-  navigation falls back to full page loads and the notifications bell needs a session to resolve
-  the user. This is an explicit opt-in: add `->middleware(['web'])` to the panel provider to get
-  sessions + CSRF on every panel route (the default stays bare so a fresh install works with zero
-  configuration).
+- **Panel routes mount inside the framework's `web` middleware group** (mirroring Filament's
+  `->hasRoutes('web')`), so sessions + CSRF + SubstituteBindings apply to every panel route out of
+  the box, and the consumer's own `web`-group middleware (e.g. the Inertia version header) runs
+  too. `Panel::middleware()` adds extra middleware after the group. The shell's POSTs validate
+  against the real session token, so a fresh install's forms, actions and notifications just
+  work.
 
 ## Contributing
 

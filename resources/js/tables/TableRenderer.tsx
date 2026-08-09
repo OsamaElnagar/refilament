@@ -44,6 +44,7 @@ import {
     TableHeader,
     TableRow as TableRowPrimitive,
 } from '@/components/ui/table';
+import { readCsrfToken } from '@/lib/csrf';
 import { panelUrl } from '@/lib/panel';
 import { cn } from '@/lib/utils';
 import ActionModal from '@/tables/action-modal';
@@ -112,6 +113,27 @@ const ACTION_COLORS: Record<TableActionColor, string> = {
     warning: 'text-amber-600 hover:bg-amber-50',
     info: 'text-sky-600 hover:bg-sky-50',
 };
+
+/**
+ * JSON POST headers carrying the session's CSRF token — the panel routes run
+ * inside the framework's `web` middleware group, so every POST must validate.
+ * The token comes from the csrf-token meta (the raw session token the CSRF
+ * middleware accepts via the X-CSRF-TOKEN header).
+ */
+function postHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+    };
+
+    const csrfToken = readCsrfToken();
+
+    if (csrfToken) {
+        headers['X-CSRF-TOKEN'] = csrfToken;
+    }
+
+    return headers;
+}
 
 /** Stable string signature of the current filter state, for the fetch guard. */
 function filtersSignature(filters: ColumnFiltersState): string {
@@ -453,7 +475,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
 
             const response = await fetch(actionUrl, {
                 method: 'POST',
-                headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+                headers: postHeaders(),
                 body: JSON.stringify({ record: String(row.id) }),
             });
 
@@ -494,7 +516,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
         try {
             const response = await fetch(panelUrl(`/table/${tableId}/bulk/${action.name}`), {
                 method: 'POST',
-                headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+                headers: postHeaders(),
                 body: JSON.stringify({ records: [...selectedRecords].map(String) }),
             });
 

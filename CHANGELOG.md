@@ -4,6 +4,11 @@
 
 ### Added
 
+- **Panel routes in the `web` middleware group** — every panel route now mounts inside the
+  framework's `web` group (mirroring Filament's `->hasRoutes('web')`), so sessions + CSRF +
+  SubstituteBindings apply to the whole panel. The shell's POSTs validate against the real
+  session token, and the POST test suite was reworked to exercise that pipeline (session token
+  injected per request, plus an enforcement test with the env=testing CSRF bypass disabled).
 - **Filament-style install experience** — `refilament:install` publishes config / assets /
   migrations, generates a consumer-owned `app/Providers/RefilamentPanelProvider.php` (mirroring
   Filament's `PanelProvider` + `panel(Panel $panel): Panel` contract) and registers it in

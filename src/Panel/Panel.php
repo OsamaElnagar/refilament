@@ -126,10 +126,11 @@ class Panel
     /**
      * Middleware applied to every panel route (the shell pages and the typed
      * endpoints) — mirrors Filament's `Panel::middleware()`. Defaults to an
-     * empty list, so the panel routes register bare; a consumer adds the
-     * framework's `web` group here to opt the panel into sessions + CSRF, or
-     * any of their own middleware. This is pure config resolved at route
-     * registration, never serialized across the wire.
+     * empty list; the framework's `web` group (sessions + CSRF +
+     * SubstituteBindings) is always applied around the panel routes, and this
+     * list runs after it — a consumer adds e.g. `RateLimiter::class` or their
+     * own middleware here. Pure config resolved at route registration, never
+     * serialized across the wire.
      *
      * @var array<int, class-string|string>
      */

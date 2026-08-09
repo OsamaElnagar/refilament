@@ -18,16 +18,19 @@ use Refilament\Refilament\Http\Middleware\Authenticate as PanelAuthenticate;
 use Refilament\Refilament\Refilament;
 
 // This file is required from Refilament::registerRoutes(), which wraps it in
-// Route::prefix(panel path) — every URI below is therefore relative to the
-// panel's URL prefix, and a consumer's `Panel::path('admin')` moves the whole
-// route group with it. The panel is fully resolved at that point (routes
-// register from the provider's `booted()` hook), so the middleware list is the
-// live one: the panel's `->middleware()` applies to every route, and the
-// access gate (PanelAuthenticate) mounts on the shell-rendering routes — the
+// the framework's `web` middleware group (sessions + CSRF + SubstituteBindings,
+// mirroring Filament's `->hasRoutes('web')`) and Route::prefix(panel path) —
+// every URI below is therefore relative to the panel's URL prefix, and a
+// consumer's `Panel::path('admin')` moves the whole route group with it. The
+// panel is fully resolved at that point (routes register from the provider's
+// `booted()` hook), so the middleware list is the live one: the panel's
+// `->middleware()` applies after the web group to every route, and the access
+// gate (PanelAuthenticate) mounts on the shell-rendering routes — the
 // dashboard and the page routes — which read the gate's config from the live
 // panel per request and pass through when it isn't enabled. The API endpoints
 // below are not gated — they are reachable only from within a rendered shell
-// page.
+// page. Because the group is wrapped in `web`, the POSTs below validate the
+// CSRF token the shell sends (session cookie → StartSession → token match).
 
 $panel = app(Refilament::class)->panel();
 $panelMiddleware = $panel->getMiddleware();

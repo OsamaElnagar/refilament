@@ -79,7 +79,8 @@ abstract class Page extends BasePage
             // segment to integers, so the shared route shape is the same for
             // every resource and page slug. The route mounts under the
             // panel's URL prefix (a consumer's ->path('admin') moves it), and
-            // carries the panel's middleware ahead of the access gate.
+            // carries the framework's `web` middleware group (sessions +
+            // CSRF) plus the panel's middleware ahead of the access gate.
             route: static function (string $routeName) use ($path): Route {
                 $refilament = app(Refilament::class);
 
@@ -89,7 +90,7 @@ abstract class Page extends BasePage
                 )
                     ->where('resource', implode('|', array_map('preg_quote', $refilament->getResourceTableIds())))
                     ->where('record', '[0-9]+')
-                    ->middleware([...$refilament->panel()->getMiddleware(), PanelAuthenticate::class])
+                    ->middleware(['web', ...$refilament->panel()->getMiddleware(), PanelAuthenticate::class])
                     ->name($routeName);
             },
         );

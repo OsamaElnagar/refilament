@@ -21,7 +21,7 @@ class {{ class }} extends PanelProvider
             ->path('{{ path }}')
             // ->brandName('My App')
             // ->colors(['primary' => '#e11d48'])
-            // ->middleware(['web'])                       // sessions + CSRF on the panel's routes
+            // ->middleware([MyMiddleware::class])        // extra middleware (the `web` group is always on)
             // ->authMiddleware([Authenticate::class])     // turn the access gate on
             // ->loginUrl('/login')                        // where unauthenticated visitors go
             // ->widgets([StatsOverview::class])
