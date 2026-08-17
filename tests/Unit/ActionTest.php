@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Refilament\Refilament\Tables\Action;
+use Refilament\Refilament\Actions\Action;
 
 it('serializes an openUrlInNewTab flag alongside the url', function () {
     $payload = Action::make('view')

@@ -7,6 +7,7 @@ use Refilament\Refilament\Navigation\NavigationItem;
 use Refilament\Refilament\Panel\Panel;
 use Refilament\Refilament\Resources\Resource;
 use Refilament\Refilament\Schemas\Schema;
+use Refilament\Refilament\Support\Enums\PanelsRenderHook;
 use Refilament\Refilament\Tables\Table;
 use Refilament\Refilament\Tests\Fixtures\DemoResource;
 use Refilament\Refilament\Tests\Fixtures\PagesResource;
@@ -91,7 +92,7 @@ it('buckets navigation items into groups by their group name', function () {
         ['key' => 'Users', 'label' => 'Users', 'url' => '/refilament/users', 'children' => []],
     ]);
     expect($contract['groups'][1]['label'])->toBe('System');
-    expect($contract['groups'][1]['items'][0]['badge'])->toBe(3);
+    expect($contract['groups'][1]['items'][0]['badge'])->toBe('3');
     expect($contract['groups'][1]['items'][0]['icon'])->toBe('heroicon-o-cog');
 
     expect($contract['items'])->toBe([
@@ -217,13 +218,27 @@ it('skips custom pages that have not opted into navigation', function () {
 
 it('serializes armed render hooks into the shell contract', function () {
     $panel = Panel::make()
-        ->renderHook('sidebar-footer', 'quick-links')
-        ->renderHook('topbar-end', 'support-menu');
+        ->renderHook(PanelsRenderHook::SidebarFooter, fn (): string => '<footer/>')
+        ->renderHook(PanelsRenderHook::TopbarEnd, fn (): string => view('vendor.render-hooks.topbar')->render());
 
     expect($panel->toArray()['renderHooks'])->toBe([
-        'sidebar-footer' => 'quick-links',
-        'topbar-end' => 'support-menu',
+        'panels::sidebar.footer' => '<footer/>',
+        'panels::topbar.end' => view('vendor.render-hooks.topbar')->render(),
     ]);
+});
+
+it('resolves every PanelsRenderHook case to its Filament slot value', function () {
+    $slots = collect(PanelsRenderHook::cases())->map(fn (PanelsRenderHook $hook) => $hook->value);
+
+    expect($slots)->each->toStartWith('panels::');
+});
+
+it('accepts a raw custom slot string and a plain HTML string', function () {
+    $panel = Panel::make()->renderHook('panels::sidebar.footer', '<footer/>');
+    $custom = Panel::make()->renderHook('my-custom-slot', '<div>custom</div>');
+
+    expect($panel->toArray()['renderHooks'])->toBe(['panels::sidebar.footer' => '<footer/>'])
+        ->and($custom->toArray()['renderHooks'])->toBe(['my-custom-slot' => '<div>custom</div>']);
 });
 
 it('omits renderHooks when no hooks are armed', function () {
@@ -242,4 +257,32 @@ it('defaults the bell polling interval to 30s', function () {
 
 it('omits the notifications key when the bell is disabled', function () {
     expect(Panel::make()->toArray())->not->toHaveKey('notifications');
+});
+
+it('serializes badge color and tooltip on a nav item', function () {
+    $panel = Panel::make()
+        ->navigationItems([
+            NavigationItem::make('Inbox')
+                ->url('/inbox')
+                ->badge(4)
+                ->badgeColor('danger')
+                ->badgeTooltip('4 unread'),
+        ]);
+
+    $item = $panel->toArray()['items'][0];
+
+    expect($item['badge'])->toBe('4');
+    expect($item['badgeColor'])->toBe('danger');
+    expect($item['badgeTooltip'])->toBe('4 unread');
+});
+
+it('omits badge color and tooltip when not configured', function () {
+    $panel = Panel::make()->navigationItems([
+        NavigationItem::make('Posts')->url('/posts')->badge(2),
+    ]);
+
+    $item = $panel->toArray()['items'][0];
+
+    expect($item)->not->toHaveKey('badgeColor');
+    expect($item)->not->toHaveKey('badgeTooltip');
 });

@@ -2,6 +2,8 @@ import FieldsetLayout from '@/schemas/layouts/fieldset-layout';
 import GridLayout from '@/schemas/layouts/grid-layout';
 import SectionLayout from '@/schemas/layouts/section-layout';
 import TabsLayout from '@/schemas/layouts/tabs-layout';
+import ViewLayout from '@/schemas/layouts/view-layout';
+import WizardLayout from '@/schemas/layouts/wizard-layout';
 import { registerLayout } from '@/schemas/registry';
 
 /**
@@ -13,4 +15,6 @@ export function registerDefaultLayouts(): void {
     registerLayout('section', SectionLayout);
     registerLayout('fieldset', FieldsetLayout);
     registerLayout('tabs', TabsLayout);
+    registerLayout('wizard', WizardLayout);
+    registerLayout('view', ViewLayout);
 }

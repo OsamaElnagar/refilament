@@ -9,9 +9,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use LogicException;
+use Refilament\Refilament\Actions\Action;
 use Refilament\Refilament\Notifications\Notification;
 use Refilament\Refilament\Refilament;
-use Refilament\Refilament\Tables\Action;
 
 /**
  * Run a global-search result action against one record (slice 3.5;

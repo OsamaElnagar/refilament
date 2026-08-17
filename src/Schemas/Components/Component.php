@@ -5,17 +5,21 @@ declare(strict_types=1);
 namespace Refilament\Refilament\Schemas\Components;
 
 use BackedEnum;
+use Closure;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Illuminate\Support\Traits\Macroable;
 use LogicException;
+use Refilament\Refilament\Actions\Action;
+use Refilament\Refilament\Schemas\Get;
 use Refilament\Refilament\Support\Concerns\CanBeConfigured;
-use Refilament\Refilament\Tables\Action;
+use Refilament\Refilament\Support\Concerns\EvaluatesClosures;
 
 abstract class Component
 {
     use CanBeConfigured;
+    use EvaluatesClosures;
     use Macroable;
 
     protected ?string $name = null;
@@ -58,7 +62,7 @@ abstract class Component
 
     protected int|string|bool|float|null $default = null;
 
-    protected bool $isRequired = false;
+    protected bool|Closure $isRequired = false;
 
     protected bool $isDisabled = false;
 
@@ -82,10 +86,33 @@ abstract class Component
 
     protected bool $isAutofocused = false;
 
-    /** @var array<int, string> */
-    protected array $validation = [];
+    /**
+     * The field's validation rules as [rule, condition] pairs — additive
+     * via rules()/rule(), each entry gated by a bool or a closure evaluated
+     * against the form data (mirrors Filament's CanBeValidated). Rules may
+     * be strings, Rule objects, or Laravel closure rules; the latter pass
+     * through to the validator untouched, never evaluated. Rule-provider
+     * closures (from `rules(fn (Get $get) => [...])`) live in
+     * $ruleProviders instead.
+     *
+     * @var array<int, array{0: string|object|Closure, 1: bool|Closure}>
+     */
+    protected array $rules = [];
 
-    /** @var array<string, string>|null */
+    /**
+     * Rule-provider closures — `rules(fn (Get $get) => [...])` — evaluated
+     * against the data snapshot at validation time to produce the rules.
+     * Distinct from plain rule closures (Laravel closure rules), which ride
+     * in $rules and are never evaluated.
+     *
+     * @var array<int, array{0: Closure, 1: bool|Closure}>
+     */
+    protected array $ruleProviders = [];
+
+    /** @var array<string, mixed> */
+    protected array $validationData = [];
+
+    /** @var array<string|int, string>|null */
     protected ?array $options = null;
 
     /** @var array<int, string>|null */
@@ -100,6 +127,50 @@ abstract class Component
     protected ?int $maxLength = null;
 
     protected ?int $columnSpan = null;
+
+    protected ?bool $isVisible = null;
+
+    protected ?bool $liveOnBlur = null;
+
+    protected ?string $autocomplete = null;
+
+    /**
+     * Mark the component as visible or hidden.
+     * Accepts a static boolean; defaults to null (omitted from payload).
+     * When set to true/false, the component includes/excludes the 'visible' key in the serialized payload.
+     */
+    public function visible(bool $visible): static
+    {
+        $this->isVisible = $visible;
+
+        return $this;
+    }
+
+    /**
+     * Mark the component as "live", meaning it will update its value
+     * as the user types. Serializes a 'dependsOn' key for the React side
+     * to handle reactivity through the dependsOn pattern.
+     *
+     * @param  string|array<int, string>  $dependencies
+     */
+    public function live(string|array $dependencies): static
+    {
+        $this->dependsOn = is_string($dependencies) ? [$dependencies] : $dependencies;
+
+        return $this;
+    }
+
+    /**
+     * Mark the component to trigger live validation on blur.
+     * Serializes a 'liveOnBlur' key for the React side to handle
+     * validation when the field loses focus.
+     */
+    public function liveOnBlur(bool $enabled = true): static
+    {
+        $this->liveOnBlur = $enabled;
+
+        return $this;
+    }
 
     final public function __construct(?string $name = null)
     {
@@ -224,13 +295,17 @@ abstract class Component
         return $this;
     }
 
-    public function required(bool $condition = true): static
+    /**
+     * Mark the field as required. Accepts a static bool or a closure
+     * evaluated against the form data (mirrors Filament's
+     * `required(bool|Closure)`): `->required(fn (Get $get): bool =>
+     * $get('type') === 'physical')`. The resolved value drives the client's
+     * required asterisk (serialized against the form's initial data) and
+     * prepends the server-side `required` rule on submit.
+     */
+    public function required(bool|Closure $condition = true): static
     {
         $this->isRequired = $condition;
-
-        if ($condition && ! in_array('required', $this->validation, true)) {
-            $this->validation[] = 'required';
-        }
 
         return $this;
     }
@@ -312,42 +387,219 @@ abstract class Component
     }
 
     /**
-     * @param  array<int, string>  $rules
+     * Add validation rules — additive, mirroring Filament's `rules()`.
+     *
+     * Accepts a pipe-separated string, an array of rules (strings, Rule
+     * objects or Laravel closure rules — passed through to the validator
+     * untouched), or a closure that receives the form data via a `Get`
+     * typed injection and returns the rules, e.g.
+     * `->rules(fn (Get $get): array => $get('country') === 'us' ? ['required', 'string'] : [])`.
+     * Every entry is gated by `$condition` (a bool or a closure evaluated
+     * against the form data).
+     *
+     * @param  string|array<int, string|object|Closure>|Closure  $rules
      */
-    public function validation(array $rules): static
+    public function rules(string|array|Closure $rules, bool|Closure $condition = true): static
     {
-        $this->validation = $rules;
+        if ($rules instanceof Closure) {
+            $this->ruleProviders[] = [$rules, $condition];
 
-        // required() may have been called before validation(); keep its rule
-        // in sync so the server never accepts an empty required field.
-        if ($this->isRequired && ! in_array('required', $this->validation, true)) {
-            $this->validation[] = 'required';
+            return $this;
+        }
+
+        if (is_string($rules)) {
+            $rules = explode('|', $rules);
+        }
+
+        foreach ($rules as $rule) {
+            $this->rules[] = [$rule, $condition];
         }
 
         return $this;
     }
 
     /**
-     * The Laravel validation rules for this field — the server-authoritative
-     * copy, never trusted client-side (docs/CONTRACT.md, "Validation").
-     *
-     * @return array<int, string>
+     * Add a single rule — additive, mirroring Filament's `rule()`. A
+     * Closure here is a Laravel closure rule
+     * (`function ($attribute, $value, $fail)`) and is passed through to the
+     * validator untouched, never evaluated.
      */
-    public function getValidationRules(): array
+    public function rule(string|object $rule, bool|Closure $condition = true): static
     {
-        return $this->validation;
+        $this->rules[] = [$rule, $condition];
+
+        return $this;
     }
 
     /**
-     * Append validation rules without replacing existing ones.
+     * @deprecated Use `rules()` instead.
+     *
+     * @param  array<int, string>  $rules
+     */
+    public function validation(array $rules): static
+    {
+        $this->rules = array_map(static fn (string $rule): array => [$rule, true], $rules);
+        $this->ruleProviders = [];
+
+        return $this;
+    }
+
+    /**
+     * The field's resolved Laravel validation rules — the
+     * server-authoritative copy, never trusted client-side. Conditions and
+     * rule-provider closures evaluate against the current data snapshot
+     * (docs/CONTRACT.md, "Validation").
+     *
+     * @return array<int, string|object|Closure>
+     */
+    public function getValidationRules(): array
+    {
+        $rules = [];
+
+        foreach ($this->rules as [$rule, $condition]) {
+            if (! $this->evaluate($condition, ...$this->getValidationDependencies())) {
+                continue;
+            }
+
+            $rules[] = $rule;
+        }
+
+        foreach ($this->ruleProviders as [$provider, $condition]) {
+            if (! $this->evaluate($condition, ...$this->getValidationDependencies())) {
+                continue;
+            }
+
+            $resolved = $this->evaluate($provider, ...$this->getValidationDependencies());
+
+            if (is_array($resolved)) {
+                array_push($rules, ...array_values($resolved));
+            } elseif (is_string($resolved)) {
+                array_push($rules, ...explode('|', $resolved));
+            } else {
+                $rules[] = $resolved;
+            }
+        }
+
+        // String rules dedupe (first occurrence wins) — field-type helpers
+        // like `numeric()` and an explicit `rules([... 'numeric' ...])`
+        // naturally overlap. Objects and closure rules always pass through.
+        $seen = [];
+
+        $rules = array_values(array_filter(
+            $rules,
+            function (mixed $rule) use (&$seen): bool {
+                if (! is_string($rule)) {
+                    return true;
+                }
+
+                if (in_array($rule, $seen, true)) {
+                    return false;
+                }
+
+                $seen[] = $rule;
+
+                return true;
+            },
+        ));
+
+        return $this->withBaseValidationRules($rules);
+    }
+
+    /**
+     * Fold the implicit base rule into a resolved rule list — `required`
+     * when the field is required, else `nullable` (mirrors Filament's
+     * getRequiredValidationRule(), so a non-required field's type rules
+     * never reject empty input — Laravel's ConvertEmptyStringsToNull
+     * middleware turns `''` into `null` before validation). `nullable` is
+     * only added when the field has rules at all, keeping rule-less fields
+     * validation-free. Idempotent, so subclasses that append intrinsic
+     * rules may call it again.
+     *
+     * @param  array<int, string|object|Closure>  $rules
+     * @return array<int, string|object|Closure>
+     */
+    protected function withBaseValidationRules(array $rules): array
+    {
+        if ($this->isRequired()) {
+            if (! in_array('required', $rules, true)) {
+                array_unshift($rules, 'required');
+            }
+
+            return $rules;
+        }
+
+        if ($rules !== [] && ! in_array('nullable', $rules, true)) {
+            array_unshift($rules, 'nullable');
+        }
+
+        return $rules;
+    }
+
+    /**
+     * The data snapshot closures evaluate against — submitted values at
+     * validation time, initial values at serialization. Set by the schema
+     * before rules are collected or the payload is built; never serialized.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function setValidationData(array $data): static
+    {
+        $this->validationData = $data;
+
+        return $this;
+    }
+
+    /**
+     * The `$get` / `Get` injections for closure evaluation — a stateless
+     * reader over the data snapshot this component was given (submitted
+     * values at validation, initial values at serialization). Named and
+     * typed so both `fn ($get)` and `fn (Get $get)` resolve.
+     *
+     * @return array{0: array<string, mixed>, 1: array<string, mixed>}
+     */
+    protected function getValidationDependencies(): array
+    {
+        return [
+            ['get' => fn (): Get => new Get($this->validationData)],
+            [Get::class => fn (): Get => new Get($this->validationData)],
+        ];
+    }
+
+    /**
+     * The subset of the resolved rules safe to ship to the client — plain
+     * strings only (Rule objects and closure rules never serialize). The
+     * client uses this solely to detect `unique:` rules for its debounced
+     * live check; the rules themselves stay server-authoritative.
+     *
+     * @return array<int, string>
+     */
+    protected function getSerializableValidationRules(): array
+    {
+        // `nullable` is the implicit base rule for non-required fields —
+        // folded in server-side, never shipped (the payload shows the rules
+        // the developer wrote; the client uses it only to detect `unique:`).
+        return array_values(array_filter(
+            $this->getValidationRules(),
+            static fn (mixed $rule): bool => is_string($rule) && $rule !== 'nullable',
+        ));
+    }
+
+    /**
+     * Append validation rules without replacing existing ones (the helper
+     * field-type configurers use, e.g. `integer()` → `['integer']`).
      *
      * @param  array<int, string>  $rules
      */
     protected function pushValidationRules(array $rules): static
     {
+        $existing = array_map(
+            static fn (array $pair): mixed => $pair[0],
+            $this->rules,
+        );
+
         foreach ($rules as $rule) {
-            if (! in_array($rule, $this->validation, true)) {
-                $this->validation[] = $rule;
+            if (! in_array($rule, $existing, true)) {
+                $this->rules[] = [$rule, true];
             }
         }
 
@@ -359,7 +611,7 @@ abstract class Component
      * `Select::make('status')->options(DemoStatus::class)`, mirroring
      * Filament's `Select::options(SomeEnum::class)`).
      *
-     * @param  array<string, string>|class-string<BackedEnum>|BackedEnum  $options
+     * @param  array<string|int, string>|class-string<BackedEnum>|BackedEnum  $options
      */
     public function options(array|string|BackedEnum $options): static
     {
@@ -471,7 +723,7 @@ abstract class Component
         return $this->record;
     }
 
-    public function getDefault(): int|string|bool|float|null
+    public function getDefault(): mixed
     {
         return $this->default;
     }
@@ -485,7 +737,7 @@ abstract class Component
 
     public function isRequired(): bool
     {
-        return $this->isRequired;
+        return (bool) $this->evaluate($this->isRequired, ...$this->getValidationDependencies());
     }
 
     public function isDisabled(): bool
@@ -515,6 +767,10 @@ abstract class Component
 
     public function isVisible(): bool
     {
+        if ($this->isVisible !== null) {
+            return $this->isVisible;
+        }
+
         return ! $this->isHidden();
     }
 
@@ -562,7 +818,7 @@ abstract class Component
                 : null,
             'default' => $this->default,
             'required' => $this->isRequired() ? true : null,
-            'validation' => $this->validation !== [] ? $this->validation : null,
+            'validation' => ($rules = $this->getSerializableValidationRules()) !== [] ? $rules : null,
             'options' => $this->options !== null ? $this->serializeOptions() : null,
             'dependsOn' => $this->dependsOn,
             'whenTruthy' => $this->whenTruthy,
@@ -574,6 +830,9 @@ abstract class Component
             'autofocus' => $this->isAutofocused() ? true : null,
             'maxLength' => $this->maxLength,
             'columnSpan' => $this->columnSpan,
+            'visible' => $this->isVisible === false ? true : null,
+            'liveOnBlur' => $this->liveOnBlur ? true : null,
+            'autocomplete' => $this->autocomplete,
         ]);
     }
 

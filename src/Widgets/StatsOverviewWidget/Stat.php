@@ -7,6 +7,7 @@ namespace Refilament\Refilament\Widgets\StatsOverviewWidget;
 use BackedEnum;
 use Closure;
 use Illuminate\Contracts\Support\Htmlable;
+use Refilament\Refilament\Support\Concerns\EvaluatesClosures;
 
 /**
  * A stat card inside a StatsOverviewWidget (slice 3.1 — docs/ROADMAP.md
@@ -26,6 +27,8 @@ use Illuminate\Contracts\Support\Htmlable;
  */
 class Stat
 {
+    use EvaluatesClosures;
+
     protected mixed $value;
 
     protected ?string $label = null;
@@ -35,7 +38,7 @@ class Stat
     /** @var string|Closure|null */
     protected mixed $description = null;
 
-    /** @var string|Closure|null */
+    /** @var string|BackedEnum|Closure|null */
     protected mixed $icon = null;
 
     /** @var string|BackedEnum|Closure|null */
@@ -97,7 +100,7 @@ class Stat
      * An icon key beside the value (heroicons by convention, e.g.
      * 'heroicon-o-document-text'). Accepts a static key or a Closure.
      */
-    public function icon(string|Closure $icon): static
+    public function icon(string|BackedEnum|Closure $icon): static
     {
         $this->icon = $icon;
 
@@ -129,15 +132,13 @@ class Stat
      */
     public function getValue(): mixed
     {
-        if ($this->value instanceof Closure) {
-            return ($this->value)();
+        $value = $this->evaluate($this->value);
+
+        if ($value instanceof Htmlable) {
+            return $value->toHtml();
         }
 
-        if ($this->value instanceof Htmlable) {
-            return $this->value->toHtml();
-        }
-
-        return $this->value;
+        return $value;
     }
 
     public function getDescription(): ?string
@@ -192,9 +193,7 @@ class Stat
 
     private function resolveToString(mixed $value): ?string
     {
-        if ($value instanceof Closure) {
-            $value = $value();
-        }
+        $value = $this->evaluate($value);
 
         if ($value === null || $value === false || $value === '') {
             return null;

@@ -10,30 +10,23 @@
  * "refilament::" in this package.
  */
 
-return array (
-  'actions' => 
-  array (
-    'filter' => 
-    array (
-      'label' => 'تصفية',
-    ),
-  ),
-  'filters' => 
-  array (
-    'actions' => 
-    array (
-      'apply' => 
-      array (
-        'label' => 'تطبيق',
-      ),
-      'reset' => 
-      array (
-        'label' => 'إعادة تعيين',
-      ),
-    ),
-  ),
-  'empty' => 
-  array (
-    'heading' => 'لا توجد بيانات للعرض',
-  ),
-);
+return [
+    'actions' => [
+        'filter' => [
+            'label' => 'تصفية',
+        ],
+    ],
+    'filters' => [
+        'actions' => [
+            'apply' => [
+                'label' => 'تطبيق',
+            ],
+            'reset' => [
+                'label' => 'إعادة تعيين',
+            ],
+        ],
+    ],
+    'empty' => [
+        'heading' => 'لا توجد بيانات للعرض',
+    ],
+];

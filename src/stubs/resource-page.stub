@@ -1,0 +1,18 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use {{ resourceFqn }};
+use Refilament\Refilament\Resources\Pages\{{ extends }};
+
+class {{ class }} extends {{ extends }}
+{
+    /**
+     * The resource this page belongs to.
+     *
+     * @var class-string<{{ resourceShort }}>|null
+     */
+    protected static ?string $resource = {{ resourceShort }}::class;
+}

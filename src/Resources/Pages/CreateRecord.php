@@ -15,6 +15,12 @@ use Refilament\Refilament\Refilament;
  */
 class CreateRecord extends Page
 {
+    /**
+     * The page's own crumb in breadcrumbs (slice 1.11) — "Create", matching
+     * Filament's create-record breadcrumb default.
+     */
+    protected static ?string $breadcrumb = 'Create';
+
     public static function getInertiaComponent(): string
     {
         return 'refilament/resource-create';

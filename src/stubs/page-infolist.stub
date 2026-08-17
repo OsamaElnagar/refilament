@@ -1,0 +1,48 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use Refilament\Refilament\Infolists\Components\TextEntry;
+use Refilament\Refilament\Pages\Page;
+use Refilament\Refilament\Refilament;
+use Refilament\Refilament\Schemas\Schema;
+
+class {{ class }} extends Page
+{
+    protected static bool $shouldRegisterNavigation = true;
+
+    public static function getSlug(): string
+    {
+        return '{{ slug }}';
+    }
+
+    public static function getInertiaComponent(): string
+    {
+        return 'refilament/page-infolist';
+    }
+
+    /**
+     * The page's read-only infolist (the page-infolists slice —
+     * docs/ROADMAP.md). Entries resolve their values server-side at payload
+     * time; on a record-scoped page they read the URL record. Mirrors the
+     * resource's infolist() override point.
+     */
+    public static function infolist(Schema $schema): Schema
+    {
+        return $schema->components([
+            // TextEntry::make('name')->label('Name'),
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function getPanelViewData(Refilament $refilament): array
+    {
+        return [
+            // 'description' => 'A page hosting a read-only infolist.',
+        ];
+    }
+}

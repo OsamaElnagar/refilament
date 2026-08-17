@@ -10,34 +10,26 @@
  * "refilament::" in this package.
  */
 
-return array (
-  'actions' => 
-  array (
-    'filter' => 
-    array (
-      'label' => 'Filter',
-    ),
-  ),
-  'filter' => 
-  array (
-    'label' => 'Filter chart data',
-  ),
-  'filters' => 
-  array (
-    'actions' => 
-    array (
-      'apply' => 
-      array (
-        'label' => 'Apply',
-      ),
-      'reset' => 
-      array (
-        'label' => 'Reset',
-      ),
-    ),
-  ),
-  'empty' => 
-  array (
-    'heading' => 'No data to display',
-  ),
-);
+return [
+    'actions' => [
+        'filter' => [
+            'label' => 'Filter',
+        ],
+    ],
+    'filter' => [
+        'label' => 'Filter chart data',
+    ],
+    'filters' => [
+        'actions' => [
+            'apply' => [
+                'label' => 'Apply',
+            ],
+            'reset' => [
+                'label' => 'Reset',
+            ],
+        ],
+    ],
+    'empty' => [
+        'heading' => 'No data to display',
+    ],
+];

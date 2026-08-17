@@ -3,6 +3,11 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Carbon;
+use Refilament\Refilament\Support\Enums\Alignment;
+use Refilament\Refilament\Support\Enums\FontFamily;
+use Refilament\Refilament\Support\Enums\FontWeight;
+use Refilament\Refilament\Support\Enums\IconPosition;
+use Refilament\Refilament\Support\Enums\IconSize;
 use Refilament\Refilament\Tables\Column;
 use Workbench\App\Models\Post;
 use Workbench\App\Models\User;
@@ -196,6 +201,70 @@ it('emits url flags on the definition', function () {
     expect($payload['openUrlInNewTab'])->toBeTrue();
 });
 
+it('emits a tooltip on the definition', function () {
+    $payload = Column::make('title')->tooltip('Row title')->toArray();
+
+    expect($payload['tooltip'])->toBe('Row title');
+});
+
+it('emits alignment as its enum value', function () {
+    $payload = Column::make('title')->alignment(Alignment::Center)->toArray();
+
+    expect($payload['alignment'])->toBe('center');
+});
+
+it('emits a pixel width', function () {
+    $payload = Column::make('title')->width(220)->toArray();
+
+    expect($payload['width'])->toBe('220px');
+});
+
+it('emits weight, font family and line clamp', function () {
+    $payload = Column::make('title')
+        ->weight(FontWeight::Bold)
+        ->fontFamily(FontFamily::Mono)
+        ->lineClamp(2)
+        ->toArray();
+
+    expect($payload['weight'])->toBe('bold');
+    expect($payload['fontFamily'])->toBe('mono');
+    expect($payload['lineClamp'])->toBe(2);
+});
+
+it('emits icon size and position when set', function () {
+    $payload = Column::make('title')
+        ->iconSize(IconSize::Large)
+        ->iconPosition(IconPosition::After)
+        ->toArray();
+
+    expect($payload['iconSize'])->toBe('lg');
+    expect($payload['iconPosition'])->toBe('after');
+});
+
+it('omits icon position when not configured', function () {
+    $payload = Column::make('title')->toArray();
+
+    expect($payload)->not()->toHaveKey('iconPosition');
+});
+
+it('emits extra attributes', function () {
+    $payload = Column::make('title')->extraAttributes(['data-testid' => 'title-cell'])->toArray();
+
+    expect($payload['extraAttributes'])->toBe(['data-testid' => 'title-cell']);
+});
+
+it('resolves presentation closures at serialization time', function () {
+    $payload = Column::make('title')
+        ->tooltip(fn (): string => 'Resolved')
+        ->alignment(fn (): string => Alignment::End->value)
+        ->weight(fn (): string => FontWeight::SemiBold->value)
+        ->toArray();
+
+    expect($payload['tooltip'])->toBe('Resolved');
+    expect($payload['alignment'])->toBe('end');
+    expect($payload['weight'])->toBe('semibold');
+});
+
 it('never serializes formatter or resolver closures', function () {
     $payload = Column::make('views')
         ->getStateUsing(static fn (mixed $record): mixed => $record)
@@ -214,4 +283,22 @@ it('serializes the state through formatStateUsing', function () {
     );
 
     expect($column->getStateFor($post))->toBe('high');
+});
+
+it('serializes a static placeholder', function () {
+    $payload = Column::make('title')->placeholder('Untitled')->toArray();
+
+    expect($payload['placeholder'])->toBe('Untitled');
+});
+
+it('evaluates a closure placeholder at serialization', function () {
+    $payload = Column::make('title')
+        ->placeholder(fn (): string => 'Untitled')
+        ->toArray();
+
+    expect($payload['placeholder'])->toBe('Untitled');
+});
+
+it('omits the placeholder key when not configured', function () {
+    expect(Column::make('title')->toArray())->not()->toHaveKey('placeholder');
 });

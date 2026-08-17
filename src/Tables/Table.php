@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Refilament\Refilament\Tables;
 
+use Closure;
 use Illuminate\Contracts\Database\Eloquent\Builder as EloquentBuilder;
+use Illuminate\Database\Eloquent\Builder as EloquentQueryBuilder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
@@ -12,8 +14,12 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Str;
 use Illuminate\Support\Traits\Macroable;
 use LogicException;
+use Refilament\Refilament\Actions\Action;
+use Refilament\Refilament\Actions\ActionGroup;
+use Refilament\Refilament\Actions\BulkAction;
 use Refilament\Refilament\Support\Concerns\CanBeConfigured;
 use Refilament\Refilament\Support\RelationshipOrderer;
+use Refilament\Refilament\Tables\Enums\FiltersLayout;
 use Refilament\Refilament\Tables\Summarizers\Summarizer;
 
 /**
@@ -39,10 +45,29 @@ class Table
     /** @var array<int, Column> */
     protected array $columns = [];
 
-    /** @var array<int, SelectFilter|TextFilter|TrashedFilter> */
+    /**
+     * @var array<int, SelectFilter|TextFilter|TrashedFilter>
+     */
     protected array $filters = [];
 
-    /** @var array<int, Action> */
+    /**
+     * Where the filters render (mirrors Filament's FiltersLayout enum). The
+     * default — Dropdown — hides them behind a toolbar trigger carrying the
+     * active-filter count; AboveContent / BelowContent lay them out as a row
+     * beside the table, BeforeContent / AfterContent as a side column, and
+     * Modal puts them behind the same trigger in a dialog. The collapsible
+     * variants start collapsed and toggle via the toolbar trigger.
+     */
+    protected FiltersLayout $filtersLayout = FiltersLayout::Dropdown;
+
+    /**
+     * Row actions plus dropdown groups (professional actions slice) — a
+     * group serializes as one entry with `group: true` and its members as
+     * `items`. The row's visible-action names may name either a flat action
+     * or a group; the React runtime renders a group as an overflow menu.
+     *
+     * @var array<int, Action|ActionGroup>
+     */
     protected array $actions = [];
 
     /** @var array<int, Action> */
@@ -80,6 +105,15 @@ class Table
     protected string $defaultSortDirection = 'asc';
 
     protected ?EloquentBuilder $query = null;
+
+    /**
+     * The resolver supplying per-record navigation URLs (record navigation
+     * slice) — wired automatically for resource tables at registration. The
+     * resolver receives a page name and a record; see urlUsing().
+     *
+     * @var Closure(string, mixed): ?string|null
+     */
+    protected ?Closure $urlResolver = null;
 
     final public function __construct(protected ?string $name = null)
     {
@@ -134,17 +168,38 @@ class Table
     /**
      * @param  array<int, SelectFilter|TextFilter|TrashedFilter>|SelectFilter|TextFilter|TrashedFilter  $filters
      */
-    public function filters(array|SelectFilter|TextFilter|TrashedFilter $filters): static
+    public function filters(array|SelectFilter|TextFilter|TrashedFilter $filters, FiltersLayout|string|null $layout = null): static
     {
         $this->filters = array_merge($this->filters, is_array($filters) ? $filters : [$filters]);
+
+        if ($layout !== null) {
+            $this->filtersLayout($layout);
+        }
 
         return $this;
     }
 
     /**
-     * @param  array<int, Action>|Action  $actions
+     * Choose where the table's filters render (mirrors Filament's
+     * FiltersLayout enum). Also settable as the second argument of
+     * `filters()`. See the enum docblock for each option.
      */
-    public function actions(array|Action $actions): static
+    public function filtersLayout(FiltersLayout|string $layout): static
+    {
+        $this->filtersLayout = $layout instanceof FiltersLayout ? $layout : FiltersLayout::from($layout);
+
+        return $this;
+    }
+
+    public function getFiltersLayout(): FiltersLayout
+    {
+        return $this->filtersLayout;
+    }
+
+    /**
+     * @param  array<int, Action|ActionGroup>|Action|ActionGroup  $actions
+     */
+    public function actions(array|Action|ActionGroup $actions): static
     {
         $this->actions = array_merge($this->actions, is_array($actions) ? $actions : [$actions]);
 
@@ -169,9 +224,9 @@ class Table
      * Actions rendered on each row. Alias of `actions()`, mirroring Filament
      * v4's `recordActions()` naming (docs/CONTRACT.md, "Tables").
      *
-     * @param  array<int, Action>|Action  $actions
+     * @param  array<int, Action|ActionGroup>|Action|ActionGroup  $actions
      */
-    public function recordActions(array|Action $actions): static
+    public function recordActions(array|Action|ActionGroup $actions): static
     {
         return $this->actions($actions);
     }
@@ -296,6 +351,59 @@ class Table
         return $this;
     }
 
+    /**
+     * Register the resolver that supplies per-record navigation URLs for this
+     * table (record navigation slice) — wired automatically for resource
+     * tables at registration (Refilament::registerResources). The resolver
+     * receives a page name and a record, returning the URL or null:
+     *
+     *   - 'default' — the row's click target: the record's view page when
+     *     the current user can view it, else the edit page when they can
+     *     edit (Filament's default record action semantics).
+     *   - 'view' / 'edit' — the resource page URL for the record, which
+     *     built-in record actions (ViewAction) resolve per row.
+     *
+     * @param  Closure(string, mixed): ?string  $resolver
+     */
+    public function urlUsing(Closure $resolver): static
+    {
+        $this->urlResolver = $resolver;
+
+        return $this;
+    }
+
+    /**
+     * Resolve a navigation URL for a page name and record through the
+     * registered resolver — null when no resolver is set or it returns none.
+     */
+    public function resolveUrl(string $page, mixed $record): ?string
+    {
+        if (! $this->urlResolver instanceof Closure) {
+            return null;
+        }
+
+        $url = ($this->urlResolver)($page, $record);
+
+        return is_string($url) && $url !== '' ? $url : null;
+    }
+
+    /**
+     * One action's per-record navigation URL — the page-navigation target
+     * (ViewAction → 'view') resolved through the table's resolver, else the
+     * action's own closure/static url(). Null means the action carries no
+     * URL for this record.
+     */
+    protected function actionUrlFor(Action $action, mixed $record): ?string
+    {
+        $page = $action->getUrlPage();
+
+        if ($page !== null) {
+            return $this->resolveUrl($page, $record);
+        }
+
+        return $action->resolveUrl($record);
+    }
+
     public function getId(): ?string
     {
         return $this->id;
@@ -318,6 +426,17 @@ class Table
         return $this->columns;
     }
 
+    public function findColumn(string $name): ?Column
+    {
+        foreach ($this->columns as $column) {
+            if ($column->getName() === $name) {
+                return $column;
+            }
+        }
+
+        return null;
+    }
+
     /**
      * @return array<int, SelectFilter|TextFilter|TrashedFilter>
      */
@@ -327,7 +446,7 @@ class Table
     }
 
     /**
-     * @return array<int, Action>
+     * @return array<int, Action|ActionGroup>
      */
     public function getActions(): array
     {
@@ -357,9 +476,19 @@ class Table
 
     public function findAction(string $name): ?Action
     {
-        foreach ($this->actions as $action) {
-            if ($action->getName() === $name) {
-                return $action;
+        foreach ($this->actions as $entry) {
+            if ($entry instanceof ActionGroup) {
+                $action = $entry->findAction($name);
+
+                if ($action !== null) {
+                    return $action;
+                }
+
+                continue;
+            }
+
+            if ($entry->getName() === $name) {
+                return $entry;
             }
         }
 
@@ -391,6 +520,15 @@ class Table
     public function getRecordValues(mixed $record): array
     {
         return $this->serializeRecord($record);
+    }
+
+    /**
+     * Whether an action declares any navigation target — a static/closure
+     * url() or a page-navigation urlPage().
+     */
+    protected function declaresNavigation(Action $action): bool
+    {
+        return $action->getUrl() !== null || $action->getUrlPage() !== null;
     }
 
     /**
@@ -478,11 +616,25 @@ class Table
         }
 
         if ($this->filters !== []) {
-            $payload['filters'] = array_map(static fn (SelectFilter|TextFilter|TrashedFilter $filter): array => $filter->toArray(), $this->filters);
+            $payload['filters'] = array_map(function (SelectFilter|TextFilter|TrashedFilter $filter): array {
+                // Relationship filters resolve their options against the
+                // table's model (mirrors Filament's filter->getTable()).
+                if ($filter instanceof SelectFilter) {
+                    $filter->setModel($this->query?->getModel());
+                }
+
+                return $filter->toArray();
+            }, $this->filters);
+            // Where the filters render (mirrors Filament's FiltersLayout) —
+            // the client adapts the toolbar/table shell to the layout.
+            $payload['filtersLayout'] = $this->filtersLayout->value;
         }
 
         if ($this->actions !== []) {
-            $payload['actions'] = array_map(static fn (Action $action): array => $action->toArray(), $this->actions);
+            $payload['actions'] = array_map(
+                static fn (Action|ActionGroup $entry): array => $entry->toArray(),
+                $this->actions,
+            );
         }
 
         if ($this->headerActions !== []) {
@@ -794,6 +946,19 @@ class Table
                 continue;
             }
 
+            if ($filter->queriesRelationships()) {
+                // A relationship filter constrains the query to records whose
+                // related model's key is among the selected values — whereHas
+                // with whereKey (which becomes WHERE IN for several keys),
+                // mirroring Filament's SelectFilter::apply().
+                $query->whereHas(
+                    $filter->getRelationshipName(),
+                    static fn (EloquentQueryBuilder $builder): EloquentQueryBuilder => $builder->whereKey($values),
+                );
+
+                continue;
+            }
+
             if ($filter->isMultiple()) {
                 $query->whereIn($filter->getAttribute(), $values);
             } else {
@@ -898,15 +1063,103 @@ class Table
             $row[$column->getName()] = $column->serializeCell($record);
         }
 
-        // Per-record visibility is evaluated now; only visible action names
-        // ride on the row, the definitions live at the table level.
-        $visibleActions = array_values(array_filter(
-            $this->actions,
-            static fn (Action $action): bool => $action->isVisibleFor($record),
-        ));
+        // Per-record visibility is evaluated now; the definitions live at the
+        // table level, but the row names exactly what renders for this record.
+        // A flat action is its name; a group is `{ name, items: [<visible
+        // member names>] }` — the members are listed explicitly so the client
+        // never re-derives visibility (and a member whose name collides with a
+        // flat action can't leak into a dropdown it doesn't belong to).
+        //
+        // Record navigation: a navigation action (ViewAction or a closure-URL
+        // action) resolves its URL per record — an action that resolves none
+        // (no view page, or the current user may not view the record) never
+        // renders, and resolved URLs ship on the row under `actionUrls` so the
+        // client navigates instead of POSTing. The row's click target
+        // (`recordUrl`) prefers the view page, falling back to the edit page.
+        $visibleActions = [];
+        $actionUrls = [];
+
+        foreach ($this->actions as $entry) {
+            if (! $entry->isVisibleFor($record)) {
+                continue;
+            }
+
+            if ($entry instanceof ActionGroup) {
+                $visibleMembers = array_values(array_filter(
+                    $entry->getActions(),
+                    static fn (Action $member): bool => $member->isVisibleFor($record),
+                ));
+
+                // Resolve each member's URL once — it feeds both the row's
+                // actionUrls map and the visibility filter below.
+                $memberUrls = [];
+
+                foreach ($visibleMembers as $member) {
+                    $url = $this->actionUrlFor($member, $record);
+                    $memberUrls[$member->getName()] = $url;
+
+                    if ($url !== null) {
+                        $actionUrls[$member->getName()] = [
+                            'url' => $url,
+                            ...($member->opensUrlInNewTab() ? ['openUrlInNewTab' => true] : []),
+                        ];
+                    }
+                }
+
+                // A navigation member that resolves no URL is dropped, and a
+                // group whose members are all gone renders nothing.
+                $visibleMembers = array_values(array_filter(
+                    $visibleMembers,
+                    fn (Action $member): bool => ! $this->declaresNavigation($member) || $memberUrls[$member->getName()] !== null,
+                ));
+
+                if ($visibleMembers === []) {
+                    continue;
+                }
+
+                $visibleActions[] = [
+                    'name' => $entry->getName(),
+                    'items' => array_map(static fn (Action $member): ?string => $member->getName(), $visibleMembers),
+                ];
+
+                continue;
+            }
+
+            $url = $this->actionUrlFor($entry, $record);
+
+            if ($url !== null) {
+                $actionUrls[$entry->getName()] = [
+                    'url' => $url,
+                    ...($entry->opensUrlInNewTab() ? ['openUrlInNewTab' => true] : []),
+                ];
+            }
+
+            // A declared navigation that resolves nowhere (no view page, or
+            // the current user may not view this record) is dropped — a
+            // button that can't go anywhere never renders.
+            if ($this->declaresNavigation($entry) && $url === null) {
+                continue;
+            }
+
+            $visibleActions[] = $entry->getName();
+        }
 
         if ($visibleActions !== []) {
-            $row['actions'] = array_map(static fn (Action $action): ?string => $action->getName(), $visibleActions);
+            $row['actions'] = $visibleActions;
+        }
+
+        if ($actionUrls !== []) {
+            $row['actionUrls'] = $actionUrls;
+        }
+
+        // The default row click target — the record's view page when the
+        // current user can view it, else the edit page (record navigation
+        // slice). Only present when a URL resolves, so the client makes the
+        // row clickable exactly then.
+        $recordUrl = $this->resolveUrl('default', $record);
+
+        if ($recordUrl !== null) {
+            $row['recordUrl'] = $recordUrl;
         }
 
         return $row;

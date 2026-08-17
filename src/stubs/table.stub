@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace {{ namespace }};
 
 use Refilament\Refilament\Tables\Column;
-use Refilament\Refilament\Tables\Table;
+use Refilament\Refilament\Tables\Table;{{ toggleColumnImport }}{{ filtersImport }}
 use {{ modelImport }};
 
 class {{ class }}
@@ -17,6 +17,6 @@ class {{ class }}
             ->columns([
 {{ body }}
             ])
-            ->query({{ modelShort }}::query());
+            ->query({{ modelShort }}::query()){{ filtersBody }};
     }
 }

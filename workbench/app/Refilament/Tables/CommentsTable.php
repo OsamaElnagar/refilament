@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace Workbench\App\Refilament\Tables;
 
-use Refilament\Refilament\Tables\Action;
+use Refilament\Refilament\Actions\Action;
 use Refilament\Refilament\Tables\Column;
+use Refilament\Refilament\Tables\Columns\BooleanColumn;
 use Refilament\Refilament\Tables\SelectFilter;
 use Refilament\Refilament\Tables\Table;
 use Workbench\App\Models\Comment;
@@ -73,7 +74,7 @@ class CommentsTable
                 Column::make('id')->label('ID')->sortable(),
                 Column::make('title')->label('Title')->sortable()->searchable(),
                 Column::make('content')->label('Content')->searchable(),
-                Column::make('is_visible')->label('Visible')->sortable(),
+                BooleanColumn::make('is_visible')->label('Visible')->sortable(),
             ]);
     }
 }

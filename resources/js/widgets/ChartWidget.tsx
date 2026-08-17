@@ -27,6 +27,7 @@ import {
     ChartTooltip,
     ChartTooltipContent,
 } from '@/components/ui/chart';
+import { panelUrl } from '@/lib/panel';
 import { getField } from '@/schemas/registry';
 import type { ChartData, ChartWidgetNode, WidgetColor } from '@/widgets/types';
 
@@ -105,7 +106,7 @@ export default function ChartWidget({ node }: { node: ChartWidgetNode }) {
                 }
 
                 const query = params.toString();
-                const response = await fetch(`/refilament/widget/${node.id}/data${query ? `?${query}` : ''}`, {
+                const response = await fetch(panelUrl(`/widget/${node.id}/data${query ? `?${query}` : ''}`), {
                     headers: { Accept: 'application/json' },
                 });
 

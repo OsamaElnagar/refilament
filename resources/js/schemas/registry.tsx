@@ -6,6 +6,8 @@ export interface FieldProps {
     node: FieldNode;
     value?: unknown;
     error?: string;
+    /** True while the whole form is submitting (fields disable their controls). */
+    disabled?: boolean;
     /** Options resolved for a `dependsOn` field, overriding `node.options`. */
     options?: SelectOption[];
     /** True while the resolve-options endpoint is fetching this field. */
@@ -19,6 +21,11 @@ export interface FieldProps {
      * a hint action's `visibleWhenFilled` against sibling fields.
      */
     formValues?: Record<string, unknown>;
+    /**
+     * All current server validation errors, keyed by field name — the
+     * repeater maps its row errors (`items.0.name`) onto the row fields.
+     */
+    errors?: Record<string, string[]>;
 }
 
 export type FieldComponent = ComponentType<FieldProps>;

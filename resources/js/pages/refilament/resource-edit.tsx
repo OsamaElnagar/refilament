@@ -3,6 +3,9 @@ import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { Card } from '@/components/ui/card';
+import PageActions, { type PageAction } from '@/components/pages/PageActions';
+import PageBreadcrumbs, { type PageBreadcrumb } from '@/components/pages/PageBreadcrumbs';
+import PageWidgets from '@/components/pages/PageWidgets';
 import AppShell from '@/components/shell/AppShell';
 import SchemaRenderer from '@/schemas/SchemaRenderer';
 import { CONTRACT_VERSION } from '@/schemas/types';
@@ -10,6 +13,7 @@ import type { SchemaDocument } from '@/schemas/types';
 import type { TablePayload } from '@/tables/types';
 import TableRenderer, { type TableSource } from '@/tables/TableRenderer';
 import { panelUrl } from '@/lib/panel';
+import type { RefilamentWidget } from '@/widgets/types';
 
 /** A relation manager the resource registered — rendered as a tab under the form. */
 interface RelationTab {
@@ -28,6 +32,15 @@ interface ResourceEditProps extends SchemaDocument {
     record: string | number;
     /** Relation managers the resource registered (slice 1.8) — may be empty. */
     relations?: RelationTab[];
+    /** Page breadcrumbs (slice 1.11) — omitted when the panel toggle is off. */
+    breadcrumbs?: PageBreadcrumb[];
+    /** Page header actions (slice 1.10) — omitted when the page declares none. */
+    pageActions?: PageAction[];
+    /** Widgets rendered above the form (slice 1.10) — omitted when none. */
+    headerWidgets?: RefilamentWidget[];
+    headerWidgetsColumns?: number;
+    footerWidgets?: RefilamentWidget[];
+    footerWidgetsColumns?: number;
 }
 
 /**
@@ -76,7 +89,7 @@ export default function ResourceEdit(props: ResourceEditProps) {
     if (props.contract !== CONTRACT_VERSION) {
         return (
             <AppShell>
-                <main className="mx-auto w-full max-w-2xl">
+                <main className="w-full">
                     <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                         Unsupported contract version <code>{props.contract}</code> — expected{' '}
                         <code>{CONTRACT_VERSION}</code>.
@@ -88,18 +101,25 @@ export default function ResourceEdit(props: ResourceEditProps) {
 
     return (
         <AppShell>
-            <main className="mx-auto w-full max-w-2xl">
-                <header className="mb-8">
-                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-                        Edit {props.resourceTitle} #{props.record}
-                    </h1>
-                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                        An auto-registered edit page — served at{' '}
-                        <code>{panelUrl(`/${props.resource}/${props.record}/edit`)}</code> from the
-                        resource's <code>getPages()</code> map, pre-filled from the record and saved
-                        through the typed update endpoint.
-                    </p>
+            <main className="w-full">
+                <header className="mb-8 flex items-start justify-between gap-4">
+                    <div>
+                        <PageBreadcrumbs breadcrumbs={props.breadcrumbs ?? []} />
+                        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                            Edit {props.resourceTitle} #{props.record}
+                        </h1>
+                        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                            An auto-registered edit page — served at{' '}
+                            <code>{panelUrl(`/${props.resource}/${props.record}/edit`)}</code> from the
+                            resource's <code>getPages()</code> map, pre-filled from the record and saved
+                            through the typed update endpoint.
+                        </p>
+                    </div>
+
+                    <PageActions actions={props.pageActions ?? []} onSucceeded={() => router.reload()} />
                 </header>
+
+                <PageWidgets widgets={props.headerWidgets} columns={props.headerWidgetsColumns} className="mb-6" />
 
                 {hasRelations ? (
                     <nav
@@ -141,6 +161,8 @@ export default function ResourceEdit(props: ResourceEditProps) {
                 {relations.map((relation) =>
                     activeTab === relation.name ? <RelationTabPanel key={relation.name} props={props} relation={relation} /> : null,
                 )}
+
+                <PageWidgets widgets={props.footerWidgets} columns={props.footerWidgetsColumns} className="mt-6" />
 
                 <footer className="mt-6 text-center text-xs text-muted-foreground">
                     contract v{props.contract} · auto-registered edit page

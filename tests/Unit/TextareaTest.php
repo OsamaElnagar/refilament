@@ -29,7 +29,7 @@ it('inherits the shared field config', function () {
         ->helperText('Tell us about yourself')
         ->placeholder('A few sentences…')
         ->maxLength(500)
-        ->validation(['string', 'max:500'])
+        ->rules(['string', 'max:500'])
         ->required()
         ->columnSpan(2)
         ->toArray();
@@ -37,6 +37,6 @@ it('inherits the shared field config', function () {
     expect($node['label'])->toBe('Biography');
     expect($node['helperText'])->toBe('Tell us about yourself');
     expect($node['maxLength'])->toBe(500);
-    expect($node['validation'])->toBe(['string', 'max:500', 'required']);
+    expect($node['validation'])->toBe(['required', 'string', 'max:500']);
     expect($node['columnSpan'])->toBe(2);
 });

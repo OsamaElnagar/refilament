@@ -10,254 +10,189 @@
  * "refilament::" in this package.
  */
 
-return array (
-  'create' => 
-  array (
-    'single' => 
-    array (
-      'label' => 'New :label',
-      'modal' => 
-      array (
-        'heading' => 'Create :label',
-        'actions' => 
-        array (
-          'create' => 
-          array (
-            'label' => 'Create',
-          ),
-          'create_another' => 
-          array (
-            'label' => 'Create & create another',
-          ),
-        ),
-      ),
-      'notifications' => 
-      array (
-        'created' => 
-        array (
-          'title' => 'Created',
-        ),
-      ),
-    ),
-  ),
-  'edit' => 
-  array (
-    'single' => 
-    array (
-      'label' => 'Edit',
-      'modal' => 
-      array (
-        'heading' => 'Edit :label',
-        'actions' => 
-        array (
-          'save' => 
-          array (
-            'label' => 'Save changes',
-          ),
-        ),
-      ),
-      'notifications' => 
-      array (
-        'saved' => 
-        array (
-          'title' => 'Saved',
-        ),
-      ),
-    ),
-  ),
-  'view' => 
-  array (
-    'single' => 
-    array (
-      'label' => 'View',
-      'modal' => 
-      array (
-        'heading' => 'View :label',
-        'actions' => 
-        array (
-          'close' => 
-          array (
-            'label' => 'Close',
-          ),
-        ),
-      ),
-    ),
-  ),
-  'delete' => 
-  array (
-    'single' => 
-    array (
-      'label' => 'Delete',
-      'modal' => 
-      array (
-        'heading' => 'Delete :label',
-        'actions' => 
-        array (
-          'delete' => 
-          array (
+return [
+    'create' => [
+        'single' => [
+            'label' => 'New :label',
+            'modal' => [
+                'heading' => 'Create :label',
+                'actions' => [
+                    'create' => [
+                        'label' => 'Create',
+                    ],
+                    'create_another' => [
+                        'label' => 'Create & create another',
+                    ],
+                ],
+            ],
+            'notifications' => [
+                'created' => [
+                    'title' => 'Created',
+                ],
+            ],
+        ],
+    ],
+    'edit' => [
+        'single' => [
+            'label' => 'Edit',
+            'modal' => [
+                'heading' => 'Edit :label',
+                'actions' => [
+                    'save' => [
+                        'label' => 'Save changes',
+                    ],
+                ],
+            ],
+            'notifications' => [
+                'saved' => [
+                    'title' => 'Saved',
+                ],
+            ],
+        ],
+    ],
+    'view' => [
+        'single' => [
+            'label' => 'View',
+            'modal' => [
+                'heading' => 'View :label',
+                'actions' => [
+                    'close' => [
+                        'label' => 'Close',
+                    ],
+                ],
+            ],
+        ],
+    ],
+    'delete' => [
+        'single' => [
             'label' => 'Delete',
-          ),
-        ),
-      ),
-      'notifications' => 
-      array (
-        'deleted' => 
-        array (
-          'title' => 'Deleted',
-        ),
-      ),
-    ),
-    'multiple' => 
-    array (
-      'label' => 'Delete selected',
-      'modal' => 
-      array (
-        'heading' => 'Delete selected :label',
-        'actions' => 
-        array (
-          'delete' => 
-          array (
-            'label' => 'Delete',
-          ),
-        ),
-      ),
-      'notifications' => 
-      array (
-        'deleted' => 
-        array (
-          'title' => 'Deleted',
-        ),
-        'deleted_partial' => 
-        array (
-          'title' => 'Deleted :count of :total',
-          'missing_authorization_failure_message' => 'You don\'t have permission to delete :count.',
-          'missing_processing_failure_message' => ':count could not be deleted.',
-        ),
-        'deleted_none' => 
-        array (
-          'title' => 'Failed to delete',
-          'missing_authorization_failure_message' => 'You don\'t have permission to delete :count.',
-          'missing_processing_failure_message' => ':count could not be deleted.',
-        ),
-      ),
-    ),
-  ),
-  'restore' => 
-  array (
-    'single' => 
-    array (
-      'label' => 'Restore',
-      'modal' => 
-      array (
-        'heading' => 'Restore :label',
-        'actions' => 
-        array (
-          'restore' => 
-          array (
+            'modal' => [
+                'heading' => 'Delete :label',
+                'actions' => [
+                    'delete' => [
+                        'label' => 'Delete',
+                    ],
+                ],
+            ],
+            'notifications' => [
+                'deleted' => [
+                    'title' => 'Deleted',
+                ],
+            ],
+        ],
+        'multiple' => [
+            'label' => 'Delete selected',
+            'modal' => [
+                'heading' => 'Delete selected :label',
+                'actions' => [
+                    'delete' => [
+                        'label' => 'Delete',
+                    ],
+                ],
+            ],
+            'notifications' => [
+                'deleted' => [
+                    'title' => 'Deleted',
+                ],
+                'deleted_partial' => [
+                    'title' => 'Deleted :count of :total',
+                    'missing_authorization_failure_message' => 'You don\'t have permission to delete :count.',
+                    'missing_processing_failure_message' => ':count could not be deleted.',
+                ],
+                'deleted_none' => [
+                    'title' => 'Failed to delete',
+                    'missing_authorization_failure_message' => 'You don\'t have permission to delete :count.',
+                    'missing_processing_failure_message' => ':count could not be deleted.',
+                ],
+            ],
+        ],
+    ],
+    'restore' => [
+        'single' => [
             'label' => 'Restore',
-          ),
-        ),
-      ),
-      'notifications' => 
-      array (
-        'restored' => 
-        array (
-          'title' => 'Restored',
-        ),
-      ),
-    ),
-    'multiple' => 
-    array (
-      'label' => 'Restore selected',
-      'modal' => 
-      array (
-        'heading' => 'Restore selected :label',
-        'actions' => 
-        array (
-          'restore' => 
-          array (
-            'label' => 'Restore',
-          ),
-        ),
-      ),
-      'notifications' => 
-      array (
-        'restored' => 
-        array (
-          'title' => 'Restored',
-        ),
-        'restored_partial' => 
-        array (
-          'title' => 'Restored :count of :total',
-          'missing_authorization_failure_message' => 'You don\'t have permission to restore :count.',
-          'missing_processing_failure_message' => ':count could not be restored.',
-        ),
-        'restored_none' => 
-        array (
-          'title' => 'Failed to restore',
-          'missing_authorization_failure_message' => 'You don\'t have permission to restore :count.',
-          'missing_processing_failure_message' => ':count could not be restored.',
-        ),
-      ),
-    ),
-  ),
-  'force-delete' => 
-  array (
-    'single' => 
-    array (
-      'label' => 'Force delete',
-      'modal' => 
-      array (
-        'heading' => 'Force delete :label',
-        'actions' => 
-        array (
-          'delete' => 
-          array (
-            'label' => 'Delete',
-          ),
-        ),
-      ),
-      'notifications' => 
-      array (
-        'deleted' => 
-        array (
-          'title' => 'Deleted',
-        ),
-      ),
-    ),
-    'multiple' => 
-    array (
-      'label' => 'Force delete selected',
-      'modal' => 
-      array (
-        'heading' => 'Force delete selected :label',
-        'actions' => 
-        array (
-          'delete' => 
-          array (
-            'label' => 'Delete',
-          ),
-        ),
-      ),
-      'notifications' => 
-      array (
-        'deleted' => 
-        array (
-          'title' => 'Deleted',
-        ),
-        'deleted_partial' => 
-        array (
-          'title' => 'Deleted :count of :total',
-          'missing_authorization_failure_message' => 'You don\'t have permission to delete :count.',
-          'missing_processing_failure_message' => ':count could not be deleted.',
-        ),
-        'deleted_none' => 
-        array (
-          'title' => 'Failed to delete',
-          'missing_authorization_failure_message' => 'You don\'t have permission to delete :count.',
-          'missing_processing_failure_message' => ':count could not be deleted.',
-        ),
-      ),
-    ),
-  ),
-);
+            'modal' => [
+                'heading' => 'Restore :label',
+                'actions' => [
+                    'restore' => [
+                        'label' => 'Restore',
+                    ],
+                ],
+            ],
+            'notifications' => [
+                'restored' => [
+                    'title' => 'Restored',
+                ],
+            ],
+        ],
+        'multiple' => [
+            'label' => 'Restore selected',
+            'modal' => [
+                'heading' => 'Restore selected :label',
+                'actions' => [
+                    'restore' => [
+                        'label' => 'Restore',
+                    ],
+                ],
+            ],
+            'notifications' => [
+                'restored' => [
+                    'title' => 'Restored',
+                ],
+                'restored_partial' => [
+                    'title' => 'Restored :count of :total',
+                    'missing_authorization_failure_message' => 'You don\'t have permission to restore :count.',
+                    'missing_processing_failure_message' => ':count could not be restored.',
+                ],
+                'restored_none' => [
+                    'title' => 'Failed to restore',
+                    'missing_authorization_failure_message' => 'You don\'t have permission to restore :count.',
+                    'missing_processing_failure_message' => ':count could not be restored.',
+                ],
+            ],
+        ],
+    ],
+    'force-delete' => [
+        'single' => [
+            'label' => 'Force delete',
+            'modal' => [
+                'heading' => 'Force delete :label',
+                'actions' => [
+                    'delete' => [
+                        'label' => 'Delete',
+                    ],
+                ],
+            ],
+            'notifications' => [
+                'deleted' => [
+                    'title' => 'Deleted',
+                ],
+            ],
+        ],
+        'multiple' => [
+            'label' => 'Force delete selected',
+            'modal' => [
+                'heading' => 'Force delete selected :label',
+                'actions' => [
+                    'delete' => [
+                        'label' => 'Delete',
+                    ],
+                ],
+            ],
+            'notifications' => [
+                'deleted' => [
+                    'title' => 'Deleted',
+                ],
+                'deleted_partial' => [
+                    'title' => 'Deleted :count of :total',
+                    'missing_authorization_failure_message' => 'You don\'t have permission to delete :count.',
+                    'missing_processing_failure_message' => ':count could not be deleted.',
+                ],
+                'deleted_none' => [
+                    'title' => 'Failed to delete',
+                    'missing_authorization_failure_message' => 'You don\'t have permission to delete :count.',
+                    'missing_processing_failure_message' => ':count could not be deleted.',
+                ],
+            ],
+        ],
+    ],
+];

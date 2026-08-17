@@ -29,7 +29,7 @@ function currentPath(): string {
 
     cachedPath = 'refilament';
 
-    const raw = document.getElementById('app')?.getAttribute('data-page');
+    const raw = readPagePayload();
 
     if (raw) {
         try {
@@ -44,6 +44,24 @@ function currentPath(): string {
     }
 
     return cachedPath;
+}
+
+/**
+ * The serialized Inertia page payload from the root view. Newer Inertia
+ * renders it in a dedicated script tag (`<script data-page="app"
+ * type="application/json">`) — the same node `@inertiajs/core` reads — with
+ * the `<div id="app">` carrying no attribute at all; older versions embed it
+ * as `data-page` on the app div. Read both so a consumer's
+ * `->path('admin')` resolves no matter which format their Inertia renders.
+ */
+function readPagePayload(): string | null {
+    const script = document.querySelector<HTMLScriptElement>('script[data-page="app"][type="application/json"]');
+
+    if (script?.textContent) {
+        return script.textContent;
+    }
+
+    return document.getElementById('app')?.getAttribute('data-page') ?? null;
 }
 
 /**

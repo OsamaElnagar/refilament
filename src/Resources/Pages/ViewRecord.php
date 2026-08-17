@@ -22,6 +22,14 @@ use Refilament\Refilament\Tables\Column;
  */
 class ViewRecord extends Page
 {
+    /**
+     * The page's own crumb in breadcrumbs (slice 1.11) — "View", matching
+     * Filament's view-record breadcrumb default. The record crumb (the
+     * record's title, linked per canView/canEdit) sits between the resource
+     * crumb and this one.
+     */
+    protected static ?string $breadcrumb = 'View';
+
     public static function getInertiaComponent(): string
     {
         return 'refilament/resource-view';
@@ -56,10 +64,12 @@ class ViewRecord extends Page
 
         // Merge order is deliberate: the page-level props (resource,
         // resourceTitle, view data) spread last so they are authoritative
-        // over any column/values key of the same name.
+        // over any column/values key of the same name. The record key
+        // forwards to the base payload so the record breadcrumb (slice 1.11)
+        // resolves the model through the page's record-binding query.
         $payload = [
             'record' => $model->getKey(),
-            ...parent::getPayload($resource, $refilament),
+            ...parent::getPayload($resource, $refilament, $record),
         ];
 
         // A resource that declares infolist entries (slice 3.3) drives the

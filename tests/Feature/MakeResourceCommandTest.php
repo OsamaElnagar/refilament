@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Support\Str;
 use Refilament\Refilament\Refilament;
 use Refilament\Refilament\Resources\Resource;
+use Workbench\App\Models\Comment;
 use Workbench\App\Models\Post;
 use Workbench\App\Models\User;
 
@@ -148,4 +149,81 @@ it('rejects an unknown model', function () {
         'name' => 'Missing',
         '--model' => 'App\\Models\\Missing',
     ])->assertExitCode(1);
+});
+
+it('emits a soft-delete filter, record title and a datetime field for a soft-deleting model', function () {
+    $path = sys_get_temp_dir().'/refilament-post-'.Str::random(6);
+    $namespace = 'Refilament\\Refilament\\Tests\\Generated';
+
+    config()->set('refilament.resources.path', $path);
+    config()->set('refilament.resources.namespace', $namespace);
+
+    $this->artisan('refilament:make-resource', [
+        'name' => 'Post',
+        '--model' => Post::class,
+        '--generate' => true,
+        '--view' => true,
+    ])->assertSuccessful();
+
+    $resource = file_get_contents($path.'/Posts/PostResource.php');
+    $table = file_get_contents($path.'/Posts/Tables/PostsTable.php');
+    $form = file_get_contents($path.'/Posts/Schemas/PostForm.php');
+    $infolist = file_get_contents($path.'/Posts/Schemas/PostInfolist.php');
+
+    // Soft-delete detection: a TrashedFilter is imported and wired into the table.
+    expect($table)->toContain('use Refilament\Refilament\Tables\TrashedFilter;');
+    expect($table)->toContain('->filters([TrashedFilter::make()])');
+
+    // Record title auto-detected from the title column.
+    expect($resource)->toContain("protected static ?string \$recordTitleAttribute = 'title';");
+
+    // Non-skipped timestamp columns become date-time pickers in the form.
+    expect($form)->toContain("DateTimePicker::make('published_at')");
+
+    // --view generates a read-only infolist schema and wires it into the resource.
+    expect($infolist)->toContain("TextEntry::make('title')");
+    expect($resource)->toContain('PostInfolist::configure($schema)');
+});
+
+it('maps boolean and text columns to toggles, textareas and toggle columns', function () {
+    $path = sys_get_temp_dir().'/refilament-comment-'.Str::random(6);
+    $namespace = 'Refilament\\Refilament\\Tests\\Generated';
+
+    config()->set('refilament.resources.path', $path);
+    config()->set('refilament.resources.namespace', $namespace);
+
+    $this->artisan('refilament:make-resource', [
+        'name' => 'Comment',
+        '--model' => Comment::class,
+        '--generate' => true,
+    ])->assertSuccessful();
+
+    $table = file_get_contents($path.'/Comments/Tables/CommentsTable.php');
+    $form = file_get_contents($path.'/Comments/Schemas/CommentForm.php');
+
+    expect($table)->toContain("ToggleColumn::make('is_visible')");
+    expect($table)->toContain('use Refilament\Refilament\Tables\ToggleColumn;');
+    expect($form)->toContain("Toggle::make('is_visible')");
+    expect($form)->toContain("Textarea::make('content')");
+
+    // Comment does not soft-delete — no trashed filter is emitted.
+    expect($table)->not->toContain('TrashedFilter');
+});
+
+it('resolves the model through --model-namespace when --model is omitted', function () {
+    $path = sys_get_temp_dir().'/refilament-ns-'.Str::random(6);
+    $namespace = 'Refilament\\Refilament\\Tests\\Generated';
+
+    config()->set('refilament.resources.path', $path);
+    config()->set('refilament.resources.namespace', $namespace);
+
+    $this->artisan('refilament:make-resource', [
+        'name' => 'Post',
+        '--model-namespace' => 'Workbench\\App\\Models',
+        '--generate' => true,
+    ])->assertSuccessful();
+
+    $resource = file_get_contents($path.'/Posts/PostResource.php');
+
+    expect($resource)->toContain('use Workbench\App\Models\Post;');
 });

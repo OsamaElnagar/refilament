@@ -8,6 +8,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 use Refilament\Refilament\Refilament;
 use Refilament\Refilament\Schemas\Schema;
+use Refilament\Refilament\Support\Enums\PanelsRenderHook;
 use Refilament\Refilament\Tables\Column;
 use Refilament\Refilament\Tables\Table;
 use Workbench\App\Http\Middleware\HandleInertiaRequests;
@@ -35,6 +36,11 @@ class WorkbenchServiceProvider extends ServiceProvider
         // discovery at the workbench's page folder and namespace.
         $this->app['config']->set('refilament.panel.pages_path', dirname(__DIR__, 2).'/app/Refilament/Pages');
         $this->app['config']->set('refilament.panel.pages_namespace', 'Workbench\\App\\Refilament\\Pages');
+
+        // Same for clusters (the page-clusters slice) — the workbench's
+        // cluster folder + namespace.
+        $this->app['config']->set('refilament.panel.clusters_path', dirname(__DIR__, 2).'/app/Refilament/Clusters');
+        $this->app['config']->set('refilament.panel.clusters_namespace', 'Workbench\\App\\Refilament\\Clusters');
 
         // The panel dashboard renders these widgets at /refilament (slice 1.9).
         $this->app['config']->set('refilament.panel.widgets', [
@@ -102,13 +108,14 @@ class WorkbenchServiceProvider extends ServiceProvider
             static fn (): Table => RecentPostsTableWidget::make()->getWidgetTable(),
         );
 
-        // Shell render hook (slice B1): the sidebar footer renders the
-        // 'quick-links' component the workbench app registers client-side
-        // (resources/js/components/shell/QuickLinks.tsx). Declaring the hook
-        // is what arms the slot — the panel payload ships the enabled list,
-        // and the React runtime mounts the registered component.
+        // Shell render hook (slice B1): the sidebar footer injects the armed
+        // HTML. Declaring the hook arms the slot — the panel payload ships the
+        // resolved markup, and the React runtime injects it at the slot.
         $this->app->make(Refilament::class)->panel()
-            ->renderHook('sidebar-footer', 'quick-links')
+            ->renderHook(
+                PanelsRenderHook::SidebarFooter,
+                fn (): string => '<div class="flex items-center justify-between gap-2 px-2 py-1 text-xs text-muted-foreground"><span>Refilament v0</span></div>',
+            )
             // Database-notifications bell (slice B3): the shell polls the
             // typed notifications endpoint every 10s for the unread count
             // and latest rows, mirroring Filament's databaseNotifications().

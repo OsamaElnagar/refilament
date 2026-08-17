@@ -27,7 +27,7 @@ export default function TextareaField({ node, value, error, onChange, formValues
                 className={cn(error && 'border-destructive focus-visible:ring-destructive/30')}
             />
 
-            {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
+            {error ? <p className="mt-0.5 text-xs text-destructive">{error}</p> : null}
         </div>
     );
 }

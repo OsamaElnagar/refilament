@@ -1,15 +1,20 @@
-import { Link } from '@inertiajs/react';
+import { Link, router } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { Card } from '@/components/ui/card';
+import PageActions, { type PageAction } from '@/components/pages/PageActions';
+import PageBreadcrumbs, { type PageBreadcrumb } from '@/components/pages/PageBreadcrumbs';
+import PageWidgets from '@/components/pages/PageWidgets';
 import AppShell from '@/components/shell/AppShell';
 import { InfolistRenderer } from '@/infolists/InfolistRenderer';
 import type { FieldNode } from '@/schemas/types';
+import { Cell } from '@/tables/cell';
 import type { TablePayload } from '@/tables/types';
 import TableRenderer, { type TableSource } from '@/tables/TableRenderer';
 import type { TableColumn, TableSummaryMap } from '@/tables/types';
 import { panelUrl } from '@/lib/panel';
+import type { RefilamentWidget } from '@/widgets/types';
 
 interface ResourceViewProps {
     /** The resource's table id — the list route to return to. */
@@ -28,6 +33,15 @@ interface ResourceViewProps {
     summary?: TableSummaryMap;
     /** Relation managers the resource registered (slice 1.8) — may be empty. */
     relations?: RelationTab[];
+    /** Page breadcrumbs (slice 1.11) — omitted when the panel toggle is off. */
+    breadcrumbs?: PageBreadcrumb[];
+    /** Page header actions (slice 1.10) — omitted when the page declares none. */
+    pageActions?: PageAction[];
+    /** Widgets rendered above the record read-out (slice 1.10) — omitted when none. */
+    headerWidgets?: RefilamentWidget[];
+    headerWidgetsColumns?: number;
+    footerWidgets?: RefilamentWidget[];
+    footerWidgetsColumns?: number;
 }
 
 /** A relation manager the resource registered — rendered as a tab on the page. */
@@ -82,17 +96,24 @@ export default function ResourceView(props: ResourceViewProps) {
 
     return (
         <AppShell>
-            <main className="mx-auto w-full max-w-3xl">
-                <header className="mb-8">
-                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-                        {props.resourceTitle} #{props.record}
-                    </h1>
-                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                        An auto-registered view page — served at{' '}
-                        <code>{panelUrl(`/${props.resource}/${props.record}`)}</code> from the resource's{' '}
-                        <code>getPages()</code> map.
-                    </p>
+            <main className="w-full">
+                <header className="mb-8 flex items-start justify-between gap-4">
+                    <div>
+                        <PageBreadcrumbs breadcrumbs={props.breadcrumbs ?? []} />
+                        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                            {props.resourceTitle} #{props.record}
+                        </h1>
+                        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                            An auto-registered view page — served at{' '}
+                            <code>{panelUrl(`/${props.resource}/${props.record}`)}</code> from the resource's{' '}
+                            <code>getPages()</code> map.
+                        </p>
+                    </div>
+
+                    <PageActions actions={props.pageActions ?? []} onSucceeded={() => router.reload()} />
                 </header>
+
+                <PageWidgets widgets={props.headerWidgets} columns={props.headerWidgetsColumns} className="mb-6" />
 
                 {hasRelations ? (
                     <nav
@@ -130,10 +151,10 @@ export default function ResourceView(props: ResourceViewProps) {
                                                 {column.label}
                                             </dt>
                                             <dd className="flex-1 break-words text-sm text-foreground">
-                                                {props.values?.[column.name] !== undefined &&
-                                                props.values?.[column.name] !== null
-                                                    ? String(props.values?.[column.name])
-                                                    : '—'}
+                                                <Cell
+                                                    value={props.values?.[column.name]}
+                                                    placeholder={column.placeholder}
+                                                />
                                             </dd>
                                         </div>
                                     ))}
@@ -168,6 +189,8 @@ export default function ResourceView(props: ResourceViewProps) {
                 {relations.map((relation) =>
                     activeTab === relation.name ? <RelationTabPanel key={relation.name} props={props} relation={relation} /> : null,
                 )}
+
+                <PageWidgets widgets={props.footerWidgets} columns={props.footerWidgetsColumns} className="mt-6" />
 
                 <footer className="mt-6 text-center text-sm">
                     <Link

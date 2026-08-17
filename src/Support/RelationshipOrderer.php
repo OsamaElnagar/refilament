@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Builder;
 use InvalidArgumentException;
+use RuntimeException;
 
 /**
  * Sorting helper for relationship (dot-notation) table columns (Slice 2.1).
@@ -78,7 +79,6 @@ class RelationshipOrderer
 
     /**
      * @param  array<int, BelongsTo<Model, Model>|HasOne<Model, Model>|MorphOne<Model, Model>>  $chain
-     *
      * @return BelongsTo<Model, Model>|HasOne<Model, Model>|MorphOne<Model, Model>
      */
     protected function lastRelationship(array $chain): BelongsTo|HasOne|MorphOne
@@ -86,7 +86,7 @@ class RelationshipOrderer
         $lastIndex = array_key_last($chain);
 
         if ($lastIndex === null) {
-            throw new \RuntimeException('Cannot order by an empty relationship chain.');
+            throw new RuntimeException('Cannot order by an empty relationship chain.');
         }
 
         return $chain[$lastIndex];

@@ -2,8 +2,6 @@ import { createInertiaApp } from '@inertiajs/react';
 import { createRoot } from 'react-dom/client';
 import type { ComponentType } from 'react';
 
-import QuickLinks from '@/components/shell/QuickLinks';
-import { registerShellSlot } from '@/components/shell/ShellSlots';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { initializeTheme } from '@/hooks/use-appearance';
@@ -11,14 +9,17 @@ import { registerDefaultEntries } from '@/infolists/entries';
 import { registerDefaultFields } from '@/schemas/fields';
 import { registerDefaultLayouts } from '@/schemas/layouts';
 import type { SchemaDocument } from '@/schemas/types';
+import { registerViewComponent } from '@/schemas/views';
+import PlaygroundCallout from '@/schemas/views/playground-callout';
 
 registerDefaultFields();
 registerDefaultLayouts();
 registerDefaultEntries();
 
-// Demo shell render hook (slice B1): map the server-declared
-// 'sidebar-footer' slot to the QuickLinks component.
-registerShellSlot('sidebar-footer', QuickLinks);
+// Demo embedded-view component (the embedded-React slice) — the playground's
+// `View::make('playground-callout')` node renders it with server-computed
+// viewData as props. A consumer registers their own components here.
+registerViewComponent('playground-callout', PlaygroundCallout);
 
 const pages = import.meta.glob<{ default: ComponentType<SchemaDocument> }>(
     './pages/**/*.tsx',

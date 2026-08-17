@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Refilament\Refilament\Navigation;
 
+use Refilament\Refilament\Support\Concerns\EvaluatesClosures;
+use Refilament\Refilament\Support\Concerns\HasBadge;
+use Refilament\Refilament\Support\Concerns\HasBadgeTooltip;
+
 /**
  * One sidebar navigation entry (slice 1.9 — docs/ROADMAP.md "1.9 Panel shell").
  *
@@ -17,6 +21,10 @@ namespace Refilament\Refilament\Navigation;
  */
 class NavigationItem
 {
+    use EvaluatesClosures;
+    use HasBadge;
+    use HasBadgeTooltip;
+
     protected ?string $key = null;
 
     protected ?string $label = null;
@@ -30,8 +38,6 @@ class NavigationItem
     protected ?int $sort = null;
 
     protected ?string $url = null;
-
-    protected null|int|string $badge = null;
 
     protected bool $openUrlInNewTab = false;
 
@@ -93,13 +99,6 @@ class NavigationItem
         return $this;
     }
 
-    public function badge(null|int|string $badge): static
-    {
-        $this->badge = $badge;
-
-        return $this;
-    }
-
     public function sort(?int $sort): static
     {
         $this->sort = $sort;
@@ -157,11 +156,6 @@ class NavigationItem
         return $this->url ?? '#';
     }
 
-    public function getBadge(): null|int|string
-    {
-        return $this->badge;
-    }
-
     public function shouldOpenUrlInNewTab(): bool
     {
         return $this->openUrlInNewTab;
@@ -185,7 +179,9 @@ class NavigationItem
             'label' => $this->getLabel(),
             'url' => $this->getUrl(),
             ...($this->icon !== null ? ['icon' => $this->getIcon()] : []),
-            ...($this->badge !== null ? ['badge' => $this->getBadge()] : []),
+            ...($this->hasBadge() ? ['badge' => $this->getBadge()] : []),
+            ...($this->getBadgeColor() !== null ? ['badgeColor' => $this->getBadgeColor()] : []),
+            ...($this->getBadgeTooltip() !== null ? ['badgeTooltip' => $this->getBadgeTooltip()] : []),
             ...($this->openUrlInNewTab ? ['openInNewTab' => true] : []),
             'children' => array_map(
                 static fn (NavigationItem $item): array => $item->toArray(),

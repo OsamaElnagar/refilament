@@ -3,6 +3,7 @@ import { CheckIcon, LaptopIcon, MoonIcon, SunIcon } from 'lucide-react';
 import {
     DropdownMenu,
     DropdownMenuContent,
+    DropdownMenuGroup,
     DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuSeparator,
@@ -44,7 +45,9 @@ export default function ThemeToggle() {
             />
 
             <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuLabel>Appearance</DropdownMenuLabel>
+                <DropdownMenuGroup>
+                    <DropdownMenuLabel>Appearance</DropdownMenuLabel>
+                </DropdownMenuGroup>
                 <DropdownMenuSeparator />
 
                 {OPTIONS.map(({ appearance: option, icon: Icon, label }) => (

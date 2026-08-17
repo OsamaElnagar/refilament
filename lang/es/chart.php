@@ -10,34 +10,26 @@
  * "refilament::" in this package.
  */
 
-return array (
-  'actions' => 
-  array (
-    'filter' => 
-    array (
-      'label' => 'Filtrar',
-    ),
-  ),
-  'filter' => 
-  array (
-    'label' => 'Filtrar los datos del gráfico',
-  ),
-  'filters' => 
-  array (
-    'actions' => 
-    array (
-      'apply' => 
-      array (
-        'label' => 'Aplicar',
-      ),
-      'reset' => 
-      array (
-        'label' => 'Restablecer',
-      ),
-    ),
-  ),
-  'empty' => 
-  array (
-    'heading' => 'No hay datos para mostrar',
-  ),
-);
+return [
+    'actions' => [
+        'filter' => [
+            'label' => 'Filtrar',
+        ],
+    ],
+    'filter' => [
+        'label' => 'Filtrar los datos del gráfico',
+    ],
+    'filters' => [
+        'actions' => [
+            'apply' => [
+                'label' => 'Aplicar',
+            ],
+            'reset' => [
+                'label' => 'Restablecer',
+            ],
+        ],
+    ],
+    'empty' => [
+        'heading' => 'No hay datos para mostrar',
+    ],
+];

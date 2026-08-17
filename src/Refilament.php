@@ -6,28 +6,58 @@ namespace Refilament\Refilament;
 
 use Closure;
 use FilesystemIterator;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Contracts\Auth\CanResetPassword;
+use Illuminate\Contracts\Container\Container;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route as RouteFacade;
+use Inertia\Inertia;
+use Inertia\Response;
+use Laravel\Fortify\Actions\RedirectIfTwoFactorAuthenticatable;
+use Laravel\Fortify\Contracts\CreatesNewUsers;
+use Laravel\Fortify\Contracts\FailedTwoFactorLoginResponse;
+use Laravel\Fortify\Contracts\LogoutResponse;
+use Laravel\Fortify\Contracts\PasswordResetResponse;
+use Laravel\Fortify\Contracts\RedirectsIfTwoFactorAuthenticatable;
+use Laravel\Fortify\Contracts\ResetsUserPasswords;
+use Laravel\Fortify\Contracts\UpdatesUserPasswords;
+use Laravel\Fortify\Contracts\UpdatesUserProfileInformation;
+use Laravel\Fortify\Features;
+use Laravel\Fortify\Fortify;
+use Laravel\Passkeys\PasskeysServiceProvider;
 use LogicException;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use Refilament\Refilament\Auth\Actions\CreateNewUser;
+use Refilament\Refilament\Auth\Actions\ResetUserPassword;
+use Refilament\Refilament\Auth\Actions\UpdateUserPassword;
+use Refilament\Refilament\Auth\Actions\UpdateUserProfileInformation;
+use Refilament\Refilament\Auth\Pages\ConfirmPassword;
+use Refilament\Refilament\Http\Controllers\ClusterRedirectController;
 use Refilament\Refilament\Http\Controllers\PanelPageController;
+use Refilament\Refilament\Http\Middleware\AppendInertiaVersion;
 use Refilament\Refilament\Http\Middleware\Authenticate as PanelAuthenticate;
 use Refilament\Refilament\Pages\Page;
 use Refilament\Refilament\Panel\Panel;
 use Refilament\Refilament\Resources\RelationManagers\RelationManager;
 use Refilament\Refilament\Resources\Resource;
 use Refilament\Refilament\Schemas\Schema;
+use Refilament\Refilament\Support\Concerns\EvaluatesClosures;
 use Refilament\Refilament\Tables\Table;
 use Refilament\Refilament\Widgets\Widget;
 
 class Refilament
 {
+    use EvaluatesClosures;
+
     /**
      * Schema resolvers keyed by the schema id the client sends with
-     * resolve-options requests (docs/CONTRACT.md, "Options").
+     * resolve-options requests (docs/CONTRACT.md, "Options"). Resolvers may
+     * return null (a page-form resolver whose page declares no form at
+     * resolution time) — resolveSchema() already handles null.
      *
-     * @var array<string, Closure(): Schema>
+     * @var array<string, Closure(): ?Schema>
      */
     protected array $schemaResolvers = [];
 
@@ -91,13 +121,24 @@ class Refilament
     protected array $widgetResolvers = [];
 
     /**
+     * Discovered cluster classes, keyed by class (the page-clusters slice).
+     * A cluster groups pages and resources under one sidebar entry; pages /
+     * resources declare it via their `$cluster` property.
+     *
+     * @var array<string, class-string<Clusters\Cluster>>
+     */
+    protected array $clusterClasses = [];
+
+    /**
      * Register the resolver for a schema document, keyed by its id.
      *
      * The closure must return the live schema definition (including any
      * server-side option resolvers) — never a serialized array, since
-     * closures cannot survive serialization.
+     * closures cannot survive serialization. Nullable for page-form
+     * resolvers (a page's form is resolved fresh per request and a page
+     * declaring none resolves null); resolveSchema() already handles null.
      *
-     * @param  Closure(): Schema  $resolver
+     * @param  Closure(): ?Schema  $resolver
      */
     public function registerSchemaResolver(string $key, Closure $resolver): static
     {
@@ -108,13 +149,7 @@ class Refilament
 
     public function resolveSchema(string $key): ?Schema
     {
-        $resolver = $this->schemaResolvers[$key] ?? null;
-
-        if (! $resolver instanceof Closure) {
-            return null;
-        }
-
-        return $resolver();
+        return $this->evaluate($this->schemaResolvers[$key] ?? null);
     }
 
     /**
@@ -131,13 +166,7 @@ class Refilament
 
     public function resolveTable(string $key): ?Table
     {
-        $resolver = $this->tableResolvers[$key] ?? null;
-
-        if (! $resolver instanceof Closure) {
-            return null;
-        }
-
-        return $resolver();
+        return $this->evaluate($this->tableResolvers[$key] ?? null);
     }
 
     /**
@@ -160,13 +189,7 @@ class Refilament
      */
     public function resolveWidget(string $key): ?Widget
     {
-        $resolver = $this->widgetResolvers[$key] ?? null;
-
-        if (! $resolver instanceof Closure) {
-            return null;
-        }
-
-        return $resolver();
+        return $this->evaluate($this->widgetResolvers[$key] ?? null);
     }
 
     /**
@@ -214,6 +237,118 @@ class Refilament
     }
 
     /**
+     * Register every Cluster class found in a directory (the page-clusters
+     * slice), mirroring the resource discovery: the namespace is derived
+     * from the file's path relative to the scanned root, and abstract or
+     * non-Cluster classes are skipped.
+     */
+    public function registerClustersFromDirectory(string $path, string $namespace): static
+    {
+        if (! is_dir($path)) {
+            return $this;
+        }
+
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
+        );
+
+        foreach ($iterator as $file) {
+            if (! $file->isFile() || ! str_ends_with($file->getFilename(), '.php')) {
+                continue;
+            }
+
+            $relative = substr($file->getPath(), strlen($path) + 1);
+            $class = rtrim($namespace, '\\')
+                .'\\'.($relative !== '' ? str_replace(DIRECTORY_SEPARATOR, '\\', $relative).'\\' : '')
+                .basename($file->getFilename(), '.php');
+
+            if (! is_subclass_of($class, Clusters\Cluster::class)) {
+                continue;
+            }
+
+            $this->registerCluster($class);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Register one cluster class (the page-clusters slice). A cluster must
+     * extend the Cluster base; duplicates are ignored.
+     *
+     * @param  class-string<Clusters\Cluster>  $class
+     */
+    public function registerCluster(string $class): static
+    {
+        if (! is_subclass_of($class, Clusters\Cluster::class)) {
+            throw new LogicException("Cluster [{$class}] must extend [".Clusters\Cluster::class.'].');
+        }
+
+        $this->clusterClasses[$class] = $class;
+
+        return $this;
+    }
+
+    /**
+     * Every registered cluster class, in registration order — the explicit
+     * registerCluster() registry merged with the panel's (which the
+     * config-seeded discovery populates), so route registration and the
+     * redirect controller see every cluster either way.
+     *
+     * @return array<int, class-string<Clusters\Cluster>>
+     */
+    public function getClusters(): array
+    {
+        return array_values(array_unique([
+            ...$this->clusterClasses,
+            ...$this->panel()->getClusters(),
+        ]));
+    }
+
+    /**
+     * The cluster class registered under a cluster slug, if any.
+     *
+     * @return class-string<Clusters\Cluster>|null
+     */
+    public function getClusterClass(string $slug): ?string
+    {
+        foreach ($this->getClusters() as $class) {
+            if ($class::getSlug() === $slug) {
+                return $class;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The pages and resources that declared a cluster as their `$cluster`
+     * (the page-clusters slice) — resources first, then panel pages, in
+     * registration order. This is what a cluster groups in the sidebar and
+     * redirects to.
+     *
+     * @return array<int, class-string>
+     */
+    public function getClusteredComponents(string $cluster): array
+    {
+        $components = [];
+
+        foreach ($this->getResources() as $resource) {
+            if ($resource::getCluster() === $cluster) {
+                $components[] = $resource;
+            }
+        }
+
+        foreach ($this->panel()->getPages() as $page) {
+            if ($page::getCluster() === $cluster) {
+                $components[] = $page;
+            }
+        }
+
+        return $components;
+    }
+
+    /**
      * Register one resource class's table and form under its ids.
      *
      * @param  class-string<resource>  $class
@@ -235,12 +370,25 @@ class Refilament
 
         $this->registerTable(
             $tableId,
-            static fn (): Table => $class::table(new Table),
+            static fn (): Table => $class::table(new Table)
+                // Record navigation (record navigation slice): the table's
+                // URL resolver supplies per-row click targets and record
+                // action URLs (ViewAction) straight from the resource's page
+                // map + policy gates, so every resource table gets clickable
+                // rows and working built-in record actions with zero consumer
+                // configuration.
+                ->urlUsing(static fn (string $page, mixed $record): ?string => $class::getRecordUrl($page, $record)),
         );
 
+        // The resource's form carries its model as the create default —
+        // `Schema::submit()` falls back to `$model::create($data)` when the
+        // consumer declares no submitUsing() handler, so resource create
+        // forms "just work" (docs/ROADMAP.md "2.6 Default create"). The
+        // consumer's form() runs first, so an explicit submitUsing() always
+        // wins over the model default.
         $this->registerSchemaResolver(
             $class::getFormId(),
-            static fn (): Schema => $class::form(new Schema),
+            static fn (): Schema => $class::form(new Schema)->model($class::getModel()),
         );
 
         $this->resourceClasses[$tableId] = $class;
@@ -335,9 +483,20 @@ class Refilament
         return Panel::make()
             ->resources($this->getResources())
             ->pages((array) config('refilament.panel.pages', []))
+            // The discovery calls fall back to the package defaults so a
+            // consumer's stale published config (one published before a
+            // feature's keys existed) never silently disables pages or
+            // cluster discovery — the config merge replaces the whole
+            // `panel` array, so missing keys would otherwise read as null
+            // and discover nothing.
             ->discoverPages(
-                (string) config('refilament.panel.pages_path'),
-                (string) config('refilament.panel.pages_namespace'),
+                (string) config('refilament.panel.pages_path', app_path('Refilament/Pages')),
+                (string) config('refilament.panel.pages_namespace', 'App\\Refilament\\Pages'),
+            )
+            ->clusters((array) config('refilament.panel.clusters', []))
+            ->discoverClusters(
+                (string) config('refilament.panel.clusters_path', app_path('Refilament/Clusters')),
+                (string) config('refilament.panel.clusters_namespace', 'App\\Refilament\\Clusters'),
             )
             ->id(config('refilament.panel.id', 'refilament'))
             ->path((string) config('refilament.panel.path', 'refilament'))
@@ -350,7 +509,16 @@ class Refilament
             ->middleware(config('refilament.panel.middleware', []))
             ->authGuard(config('refilament.panel.auth_guard', 'web'))
             ->loginUrl(config('refilament.panel.login_url'))
-            ->authMiddleware(config('refilament.panel.auth_middleware', []));
+            ->authMiddleware(config('refilament.panel.auth_middleware', []))
+            ->login(config('refilament.panel.login_page'))
+            ->registration(config('refilament.panel.registration_page'))
+            ->passwordReset(
+                config('refilament.panel.request_password_reset_page'),
+                config('refilament.panel.reset_password_page'),
+            )
+            ->emailVerification(config('refilament.panel.email_verification_page'))
+            ->twoFactorAuthentication(config('refilament.panel.two_factor_authentication', false))
+            ->profile(config('refilament.panel.profile_page'));
     }
 
     /**
@@ -376,6 +544,308 @@ class Refilament
             });
 
         return $this;
+    }
+
+    /**
+     * Register the panel's first-party auth routes (docs/ROADMAP.md "1.9 auth
+     * pages") under the panel's URL prefix, plus the Fortify view responses
+     * that render the panel's pages. Called from the service provider's
+     * `booted()` hook (after every provider — including a consumer's
+     * PanelProvider — has registered and booted, so the panel config is
+     * final). Fortify's own routes are left alone; this panel owns the
+     * routes it registers, delegating to Fortify's controllers and their
+     * machinery (login pipeline, rate limiting, password broker, email
+     * verification, two-factor challenge).
+     *
+     * No-op unless at least one auth page is enabled — the default panel
+     * ships with none (the permissive workbench stays untouched, and an
+     * installed-but-unused Fortify keeps out of the way).
+     */
+    public function registerAuthRoutes(): static
+    {
+        $panel = $this->panel();
+
+        // Shared auth mode (docs/AUTH-ROUTE-COLLISION-INVESTIGATION.md): the
+        // panel owns no auth surface — no routes, and Fortify's global config
+        // (guard/home/features) is left entirely to the app. The auth-page
+        // setters throw in shared mode, so hasAuthPages() is always false
+        // here; the explicit check keeps the intent visible and guarantees
+        // the config below never runs.
+        if ($panel->getAuthMode()->isShared() || ! $panel->hasAuthPages()) {
+            return $this;
+        }
+
+        // Fortify's controllers read these at request time (features are
+        // consulted inside the login pipeline / controllers, not at route
+        // registration), so setting them here — after Fortify's own boot — is
+        // the right moment. `fortify.home` is where Fortify's responses
+        // redirect after login/register: the panel dashboard. The guard is the
+        // panel's own, so the panel's auth pages authenticate the same guard
+        // the auth gate checks.
+        config([
+            'fortify.guard' => $panel->getAuthGuard(),
+            'fortify.home' => $panel->getDashboardUrl(),
+            'fortify.features' => $this->fortifyFeatures($panel),
+        ]);
+
+        $this->registerAuthActions($panel);
+
+        $this->registerAuthViews($panel);
+
+        $this->registerAuthResponses($panel);
+
+        $this->registerPasswordResetUrl($panel);
+
+        RouteFacade::middleware(['web'])
+            ->prefix($panel->getPath())
+            ->group(static function (): void {
+                require __DIR__.'/../routes/auth.php';
+            });
+
+        return $this;
+    }
+
+    /**
+     * Point the password-reset email's link at the panel's own reset page
+     * (docs/AUTH-ROUTE-COLLISION-INVESTIGATION.md). Laravel's default
+     * `ResetPassword` notification builds its URL from the *global*
+     * `password.reset` route name, which the panel no longer registers — the
+     * email would link to the app's reset page (or throw when no such route
+     * exists). `createUrlUsing()` is the framework's documented hook for this;
+     * the static is public, so a consumer's own callback (registered before
+     * this booted hook) always wins.
+     */
+    protected function registerPasswordResetUrl(Panel $panel): void
+    {
+        if (! $panel->hasPasswordReset() || ResetPassword::$createUrlCallback !== null) {
+            return;
+        }
+
+        ResetPassword::createUrlUsing(
+            fn (CanResetPassword $notifiable, string $token): string => url(route("refilament.{$panel->getId()}.auth.password.reset", [
+                'token' => $token,
+                'email' => $notifiable->getEmailForPasswordReset(),
+            ], false)),
+        );
+    }
+
+    /**
+     * The Fortify feature flags the panel's auth pages imply — the union of
+     * the standard authenticated-account features (profile + password
+     * updates, whose endpoints the panel registers for consumer settings
+     * pages) and the panel-enabled flows (registration, password reset,
+     * email verification, two-factor). Passkeys are included only when the
+     * separate `laravel/passkeys` package is installed.
+     *
+     * @return array<int, string>
+     */
+    protected function fortifyFeatures(Panel $panel): array
+    {
+        $features = [
+            Features::updateProfileInformation(),
+            Features::updatePasswords(),
+        ];
+
+        if ($panel->hasRegistration()) {
+            $features[] = Features::registration();
+        }
+
+        if ($panel->hasPasswordReset()) {
+            $features[] = Features::resetPasswords();
+        }
+
+        if ($panel->hasEmailVerification()) {
+            $features[] = Features::emailVerification();
+        }
+
+        if ($panel->hasTwoFactorAuthentication()) {
+            $features[] = Features::twoFactorAuthentication([
+                'confirm' => true,
+                'confirmPassword' => true,
+            ]);
+        }
+
+        if (class_exists(PasskeysServiceProvider::class)) {
+            $features[] = Features::passkeys([
+                'confirmPassword' => true,
+            ]);
+        }
+
+        return $features;
+    }
+
+    /**
+     * Bind the first-party default actions for the enabled flows, unless the
+     * consumer already bound their own (`Fortify::createUsersUsing()` /
+     * `resetUserPasswordsUsing()`) — registration and password reset then
+     * work out of the box, and a consumer's binding always wins.
+     */
+    protected function registerAuthActions(Panel $panel): void
+    {
+        if ($panel->hasRegistration() && ! app()->bound(CreatesNewUsers::class)) {
+            Fortify::createUsersUsing(CreateNewUser::class);
+        }
+
+        if ($panel->hasPasswordReset() && ! app()->bound(ResetsUserPasswords::class)) {
+            Fortify::resetUserPasswordsUsing(ResetUserPassword::class);
+        }
+
+        // Profile and password update actions are always bound when the panel
+        // has auth pages enabled (the endpoints are unconditional). The
+        // package's own defaults handle the standard name/email/password
+        // fields through the connection's users table; a consumer's
+        // `Fortify::updateUserProfileInformationUsing(...)` /
+        // `updateUserPasswordUsing(...)` always wins.
+        if (! app()->bound(UpdatesUserProfileInformation::class)) {
+            Fortify::updateUserProfileInformationUsing(UpdateUserProfileInformation::class);
+        }
+
+        if (! app()->bound(UpdatesUserPasswords::class)) {
+            Fortify::updateUserPasswordsUsing(UpdateUserPassword::class);
+        }
+    }
+
+    /**
+     * Point Fortify's view-response contracts at the panel's Inertia pages —
+     * each enabled page's component, with its per-request props, rendered
+     * through the package root view so the auth pages boot the panel's own
+     * bundle. A consumer overriding a page class only has to register a React
+     * component under that class's component name.
+     */
+    protected function registerAuthViews(Panel $panel): void
+    {
+        $inertia = static function (string $component, array $data = []): Response {
+            return Inertia::render($component, $data)->rootView('refilament::app');
+        };
+
+        if ($panel->hasLogin()) {
+            Fortify::loginView(
+                fn (Request $request) => $inertia($panel->getLoginPage()::getComponent(), $panel->getLoginPage()::getViewData($request)),
+            );
+        }
+
+        if ($panel->hasRegistration()) {
+            Fortify::registerView(
+                fn (Request $request) => $inertia($panel->getRegistrationPage()::getComponent(), $panel->getRegistrationPage()::getViewData($request)),
+            );
+        }
+
+        if ($panel->hasPasswordReset()) {
+            Fortify::requestPasswordResetLinkView(
+                fn (Request $request) => $inertia($panel->getRequestPasswordResetPage()::getComponent(), $panel->getRequestPasswordResetPage()::getViewData($request)),
+            );
+
+            Fortify::resetPasswordView(
+                fn (Request $request) => $inertia($panel->getResetPasswordPage()::getComponent(), $panel->getResetPasswordPage()::getViewData($request)),
+            );
+        }
+
+        if ($panel->hasEmailVerification()) {
+            Fortify::verifyEmailView(
+                fn (Request $request) => $inertia($panel->getEmailVerificationPage()::getComponent(), $panel->getEmailVerificationPage()::getViewData($request)),
+            );
+        }
+
+        if ($panel->hasTwoFactorAuthentication()) {
+            Fortify::twoFactorChallengeView(
+                fn (Request $request) => $inertia($panel->getTwoFactorChallengePage()::getComponent(), $panel->getTwoFactorChallengePage()::getViewData($request)),
+            );
+        }
+
+        // Password-confirmation view bound unconditionally (the route is always
+        // mounted) — casts ConfirmablePasswordController::show() to Inertia so
+        // the password.confirm middleware never hits a ViewNotFound error.
+        Fortify::confirmPasswordView(
+            fn (Request $request) => $inertia(ConfirmPassword::getComponent(), ConfirmPassword::getViewData($request)),
+        );
+    }
+
+    /**
+     * Point Fortify's responses at the panel — the panel-scoped route names
+     * (docs/AUTH-ROUTE-COLLISION-INVESTIGATION.md). Several of Fortify's
+     * responses hardcode a global route name (`login`, `two-factor.login`)
+     * that no longer exists under the panel's scoped names; each is rebound
+     * here to a first-party response that resolves the panel's own route
+     * instead. Fortify's auth machinery (hashing, 2FA verification, rate
+     * limiting) is untouched — only the redirect targets change.
+     *
+     * Fortify's own provider already bound each contract at bootstrap, so
+     * `app()->bound()` can't tell the package's binding from a consumer's —
+     * instead we resolve the current instance and only replace it when it is
+     * still Fortify's default response. A consumer's own binding therefore
+     * always wins.
+     */
+    protected function registerAuthResponses(Panel $panel): void
+    {
+        $current = app(LogoutResponse::class);
+
+        if (get_class($current) === \Laravel\Fortify\Http\Responses\LogoutResponse::class) {
+            app()->instance(
+                LogoutResponse::class,
+                new Auth\Responses\LogoutResponse($panel),
+            );
+        }
+
+        // Two-factor: the login→challenge bounce, the failed-challenge
+        // response and (in routes/auth.php) the challenge page controller all
+        // hardcode Fortify's global names. Rebind the ones resolved through
+        // the container so they land on the panel's own challenge page.
+        if ($panel->hasTwoFactorAuthentication()) {
+            // Both contracts resolve cleanly (their default concretes have no
+            // required primitives), so "still the default" is answered by
+            // resolving the current instance and comparing classes.
+            $challenge = app(RedirectsIfTwoFactorAuthenticatable::class);
+
+            if (get_class($challenge) === RedirectIfTwoFactorAuthenticatable::class) {
+                app()->scoped(
+                    RedirectsIfTwoFactorAuthenticatable::class,
+                    fn (): RedirectIfTwoFactorAuthenticatable => app(Auth\Actions\RedirectIfTwoFactorAuthenticatable::class),
+                );
+            }
+
+            $failedTwoFactor = app(FailedTwoFactorLoginResponse::class);
+
+            if (get_class($failedTwoFactor) === \Laravel\Fortify\Http\Responses\FailedTwoFactorLoginResponse::class) {
+                app()->instance(
+                    FailedTwoFactorLoginResponse::class,
+                    new Auth\Responses\FailedTwoFactorLoginResponse($panel),
+                );
+            }
+        }
+
+        // Password reset: Fortify's default success response evaluates
+        // `route('login')` eagerly as its fallback target, which throws once
+        // the global name is gone. Rebind with a factory — the reset status is
+        // per-request (the controller resolves the contract with ['status' =>
+        // $status]), so the binding must forward the container parameters.
+        // The default concrete can't be resolved without that per-request
+        // status, so the "still default" check inspects the binding rather
+        // than the instance.
+        if ($panel->hasPasswordReset()) {
+            if ($this->isBoundToDefault(
+                PasswordResetResponse::class,
+                \Laravel\Fortify\Http\Responses\PasswordResetResponse::class,
+            )) {
+                app()->bind(
+                    PasswordResetResponse::class,
+                    fn (Container $app, array $parameters): PasswordResetResponse => new Auth\Responses\PasswordResetResponse($parameters['status'] ?? ''),
+                );
+            }
+        }
+    }
+
+    /**
+     * Whether a container contract is still bound to Fortify's default
+     * concrete — the package's rebindings only apply when the consumer hasn't
+     * bound their own implementation. Inspects the binding (not the resolved
+     * instance): some defaults (e.g. PasswordResetResponse) can't be resolved
+     * without per-request parameters, and a consumer's `instance()` binding
+     * never appears in the bindings table at all, which safely reads as
+     * "not the default" — the consumer wins.
+     */
+    protected function isBoundToDefault(string $abstract, string $defaultClass): bool
+    {
+        return (app()->getBindings()[$abstract]['concrete'] ?? null) === $defaultClass;
     }
 
     /**
@@ -459,6 +929,37 @@ class Refilament
             foreach ($class::getPages() as $pageName => $registration) {
                 $path = $registration->getPath();
 
+                // A page that hosts a form (the page-forms slice — any page
+                // declaring `form()`) registers its schema resolver here, so
+                // the typed submit / validate endpoints can rebuild it per
+                // request. Runs before the duplicate-name guard: every page
+                // class registers its own resolver even when the shared page
+                // route was already claimed by another resource.
+                $pageClass = $registration->getPage();
+
+                // hasFormSchema() (not getFormSchema()) gates the resolver
+                // registration: it builds the schema without the
+                // singular-resource auto-wire, so boot stays free of DB
+                // queries even for a singular page on a fresh install.
+                if ($pageClass::hasFormSchema()) {
+                    $this->registerSchemaResolver(
+                        $pageClass::getFormId(),
+                        static fn (): ?Schema => $pageClass::getFormSchema(),
+                    );
+                }
+
+                // A page hosting a table (the pages-as-tables slice)
+                // registers its table resolver the same way — the typed
+                // table endpoints (index / actions / bulk) rebuild the
+                // table per request, so pagination, sorting, search and
+                // filter closures re-run with fresh state.
+                if ($pageClass::getTable() !== null) {
+                    $this->registerTable(
+                        $pageClass::getTableId(),
+                        static fn (): Table => $pageClass::getTable(),
+                    );
+                }
+
                 if (isset($registeredPageNames[$pageName])) {
                     // Same page name across resources must mean the same path
                     // — a resource declaring a different path under a name
@@ -487,8 +988,45 @@ class Refilament
 
         if ($pages !== []) {
             $pageSlugs = [];
+            $clusterPageSlugs = [];
 
             foreach ($pages as $pageClass) {
+                // Standalone page forms (the page-forms slice): register the
+                // page's schema resolver so its typed submit / validate
+                // endpoints work, exactly like resource-page forms above.
+                // hasFormSchema() keeps boot DB-free (see the resource-page
+                // registration above).
+                if ($pageClass::hasFormSchema()) {
+                    $this->registerSchemaResolver(
+                        $pageClass::getFormId(),
+                        static fn (): ?Schema => $pageClass::getFormSchema(),
+                    );
+                }
+
+                // Standalone page tables (the pages-as-tables slice): the
+                // typed table endpoints resolve through the page's resolver,
+                // exactly like resource-page tables above.
+                if ($pageClass::getTable() !== null) {
+                    $this->registerTable(
+                        $pageClass::getTableId(),
+                        static fn (): Table => $pageClass::getTable(),
+                    );
+                }
+
+                // The slug uniqueness gate applies within each routing
+                // family: clustered pages live under their cluster's segment,
+                // so they can never collide with a flat page or with each
+                // other across clusters.
+                if ($pageClass::isClustered()) {
+                    $clusterSlug = $pageClass::getCluster()::getSlug();
+                    // The {page} gate uses the page's own (possibly
+                    // overridden) bare slug — the controller re-combines it
+                    // with the cluster segment for resolvePanelPage().
+                    $clusterPageSlugs[$clusterSlug][$pageClass::getSlug()] = $pageClass;
+
+                    continue;
+                }
+
                 $slug = $pageClass::getSlug();
 
                 if (isset($pageSlugs[$slug])) {
@@ -501,20 +1039,62 @@ class Refilament
                 $pageSlugs[$slug] = $pageClass;
             }
 
-            // One shared route serves every standalone panel page — the
+            // The shared middleware list for the page + cluster routes —
+            // combined into a SINGLE ->middleware() call: on Laravel 13 the
+            // RouteRegistrar's attribute() REPLACES rather than merges, so
+            // chaining a second ->middleware() would drop the `web` group
+            // (and with it StartSession) — the standalone pages would then
+            // run without a session and the auth gate would reject every
+            // request. This single call yields exactly the middleware the
+            // dashboard and typed endpoints carry (routes/refilament.php
+            // applies `web` as the one group wrapper and the panel list
+            // per-route).
+            $pageMiddleware = ['web', ...$this->panel()->getMiddleware(), PanelAuthenticate::class, AppendInertiaVersion::class];
+
+            // One shared route serves every flat standalone panel page — the
             // where() gate restricts it to the declared slugs, mirroring the
-            // shared {resource} route for resource pages. Registered under the
-            // panel's path (like every other panel route) and after the
+            // shared {resource} route for resource pages. Registered under
+            // the panel's path (like every other panel route) and after the
             // resource routes above, so it can't shadow the exact-path
             // dashboard or collide with a discovered resource id.
-            RouteFacade::middleware(['web'])
-                ->prefix($this->panel()->getPath())
-                ->middleware([...$this->panel()->getMiddleware(), PanelAuthenticate::class])
-                ->group(static function () use ($pageSlugs): void {
-                    RouteFacade::get('{page}', [PanelPageController::class, 'show'])
-                        ->where('page', implode('|', array_map('preg_quote', array_keys($pageSlugs))))
-                        ->name('refilament.page');
-                });
+            if ($pageSlugs !== []) {
+                RouteFacade::middleware($pageMiddleware)
+                    ->prefix($this->panel()->getPath())
+                    ->group(static function () use ($pageSlugs): void {
+                        RouteFacade::get('{page}', [PanelPageController::class, 'show'])
+                            ->where('page', implode('|', array_map('preg_quote', array_keys($pageSlugs))))
+                            ->name('refilament.page');
+                    });
+            }
+
+            // Clustered standalone pages (the page-clusters slice) serve at
+            // /{cluster}/{page}: one shared route per cluster, gated to the
+            // cluster's slug and the basename slugs of the pages inside it.
+            foreach ($clusterPageSlugs as $clusterSlug => $members) {
+                RouteFacade::middleware($pageMiddleware)
+                    ->prefix($this->panel()->getPath())
+                    ->group(static function () use ($clusterSlug, $members): void {
+                        RouteFacade::get('{cluster}/{page}', [PanelPageController::class, 'show'])
+                            ->where('cluster', preg_quote($clusterSlug, '#'))
+                            ->where('page', implode('|', array_map('preg_quote', array_keys($members))))
+                            ->name('refilament.cluster.page');
+                    });
+            }
+
+            // Every cluster registers a redirect route at its own slug — a
+            // cluster never renders; the URL redirects to the first
+            // accessible clustered component (mirroring Filament's
+            // Cluster::mount()). The shared {cluster} URI is gated to the
+            // cluster's own slug, so each cluster owns its segment.
+            foreach ($this->getClusters() as $clusterClass) {
+                RouteFacade::middleware($pageMiddleware)
+                    ->prefix($this->panel()->getPath())
+                    ->group(static function () use ($clusterClass): void {
+                        RouteFacade::get('{cluster}', [ClusterRedirectController::class, '__invoke'])
+                            ->where('cluster', preg_quote($clusterClass::getSlug(), '#'))
+                            ->name('refilament.cluster');
+                    });
+            }
         }
 
         return $this;
@@ -532,7 +1112,9 @@ class Refilament
     public function resolvePanelPage(string $slug): ?string
     {
         foreach ($this->panel()->getPages() as $pageClass) {
-            if ($pageClass::getSlug() === $slug) {
+            // The full path (cluster-prefixed for clustered pages, the
+            // page-clusters slice).
+            if ($pageClass::getSlugPath() === $slug) {
                 return $pageClass;
             }
         }

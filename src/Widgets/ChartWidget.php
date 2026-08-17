@@ -7,6 +7,7 @@ namespace Refilament\Refilament\Widgets;
 use Closure;
 use Refilament\Refilament\Schemas\Components\Component;
 use Refilament\Refilament\Schemas\Schema;
+use Refilament\Refilament\Support\Concerns\EvaluatesClosures;
 
 /**
  * A chart widget (slice 3.2 — docs/ROADMAP.md "3.2 Charts widget").
@@ -34,6 +35,8 @@ use Refilament\Refilament\Schemas\Schema;
  */
 abstract class ChartWidget extends Widget
 {
+    use EvaluatesClosures;
+
     /**
      * Chart.js-style data map:
      * `['labels' => list<string>, 'datasets' => list<array{data: list<int|float>, label?: string, color?: string}>]`.
@@ -41,7 +44,7 @@ abstract class ChartWidget extends Widget
      * A closure receives the current filter values as its first argument
      * (`$filterData`); a zero-arg closure simply ignores it.
      *
-     * @var Closure(array<string, mixed>): ChartWidgetData|ChartWidgetData|null
+     * @var Closure|ChartWidgetData|null
      */
     protected mixed $chartData = null;
 
@@ -83,7 +86,7 @@ abstract class ChartWidget extends Widget
      * the same shape Filament's `getData()` returns (docs/CONTRACT.md,
      * "Widgets").
      *
-     * @param  Closure(array<string, mixed>): ChartWidgetData|ChartWidgetData  $data
+     * @param  Closure|ChartWidgetData  $data
      */
     public function data(Closure|array $data): static
     {
@@ -179,11 +182,15 @@ abstract class ChartWidget extends Widget
      */
     public function getData(array $filterData = []): array
     {
-        if ($this->chartData instanceof Closure) {
-            return ($this->chartData)($filterData);
+        // Evaluated through a local so the closure's result stays open — the
+        // typed evaluate() signature is looser than a bare Closure property.
+        $data = $this->chartData;
+
+        if ($data instanceof Closure) {
+            $data = $this->evaluate($data, ['filterData' => $filterData]);
         }
 
-        return $this->chartData ?? [];
+        return $data ?? [];
     }
 
     /**

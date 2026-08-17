@@ -54,8 +54,8 @@ it('collects validation rules from every field in the tree', function () {
     $schema = Schema::make()->components([
         Section::make()->schema([
             Grid::make()->columns(2)->schema([
-                demoComponentForSchema('title')->required()->validation(['min:3', 'max:255']),
-                demoComponentForSchema('slug')->validation(['required', 'regex:/^[a-z0-9-]+$/']),
+                demoComponentForSchema('title')->required()->rules(['min:3', 'max:255']),
+                demoComponentForSchema('slug')->rules(['required', 'regex:/^[a-z0-9-]+$/']),
             ]),
             demoComponentForSchema('author')->required(),
         ]),
@@ -63,8 +63,8 @@ it('collects validation rules from every field in the tree', function () {
     ]);
 
     expect($schema->getValidationRules())->toBe([
-        'title' => ['min:3', 'max:255', 'required'],
-        'slug' => ['required', 'regex:/^[a-z0-9-]+$/'],
+        'title' => ['required', 'min:3', 'max:255'],
+        'slug' => ['nullable', 'required', 'regex:/^[a-z0-9-]+$/'],
         'author' => ['required'],
     ]);
 });
@@ -180,11 +180,11 @@ it('throws when submitted without a handler', function () {
     Schema::make()->submit([]);
 })->throws(LogicException::class, 'must have a [submitUsing()] handler');
 
-it('keeps the required rule when validation() replaces rules', function () {
+it('keeps the required rule when rules() are set', function () {
     $component = demoComponentForSchema('title')
         ->required()
-        ->validation(['string', 'max:255']);
+        ->rules(['string', 'max:255']);
 
-    expect($component->getValidationRules())->toBe(['string', 'max:255', 'required']);
+    expect($component->getValidationRules())->toBe(['required', 'string', 'max:255']);
     expect($component->isRequired())->toBeTrue();
 });

@@ -11,8 +11,10 @@ use Refilament\Refilament\Refilament;
 /**
  * The panel's access gate (slice 1.9 "auth gate").
  *
- * Mounted on the panel's shell-rendering routes (the dashboard, every
- * resource page, and the standalone pages). Whether the gate is actually
+ * Mounted on **every** panel route — the shell pages (the dashboard, every
+ * resource page, the standalone pages) and the typed endpoints (table,
+ * schema, action, notifications) alike, mirroring Filament, where the whole
+ * panel sits behind `authMiddleware()`. Whether the gate is actually
  * enforced is decided *per request* from the live panel
  * (Refilament::panel()->getAuthMiddleware()) — never from a cached Panel
  * instance or a config copy, because the panel may be built during route
@@ -22,25 +24,40 @@ use Refilament\Refilament\Refilament;
  *
  * - The gate is **enabled** only while its own middleware class appears in the
  *   panel's `authMiddleware()` list. When listed, the request must authenticate
- *   against the panel's auth guard (`->authGuard()`) before any shell page
- *   renders; an unauthenticated visitor is redirected to the panel's
- *   `loginUrl`.
+ *   against the panel's auth guard (`->authGuard()`) before anything the
+ *   panel serves is reachable; an unauthenticated shell request is redirected
+ *   to the panel's `loginUrl`, and an unauthenticated JSON/API request gets a
+ *   401 (the framework's `AuthenticationException` handling — the endpoints
+ *   are never reachable without a session either).
  * - Otherwise it passes every request straight through — the permissive
  *   default that keeps the workbench (and the panel itself) open.
  *
  * This mirrors Filament's `authMiddleware()` opt-in and `Authenticate`:
  * enrolling the gate is the switch, and the guard/login target are pure panel
  * config resolved per request, never a cached copy.
+ *
+ * Two mount styles share the class:
+ *
+ * - **Gate** (`authMiddleware([Authenticate::class])`, no guard param) — the
+ *   permissive opt-in described above: enforcement follows the live panel's
+ *   `authMiddleware()` list.
+ * - **Auth routes** (`Authenticate:{$guard}` in `routes/auth.php`, guard param
+ *   passed) — always enforced. The panel's own authenticated auth surface
+ *   (profile, password confirmation, two-factor management) must require a
+ *   session regardless of the gate toggle, and the same `redirectTo()`
+ *   sends the visitor to the panel's login page.
  */
 class Authenticate extends Middleware
 {
     public function handle($request, Closure $next, ...$guards): mixed
     {
-        // Permissive default: without the gate listed in the live panel's
-        // auth middleware, the shell pages serve openly (workbench mode). The
-        // panel resolves per request, so a consumer toggling
-        // ->authMiddleware() needs no route re-registration.
-        if (! in_array(self::class, app(Refilament::class)->panel()->getAuthMiddleware(), true)) {
+        // Gate usage passes no guard and follows the live panel's auth
+        // middleware list (permissive default: without the gate listed, the
+        // shell pages serve openly — workbench mode). Auth-route usage passes
+        // the guard explicitly and always enforces. The panel resolves per
+        // request, so a consumer toggling ->authMiddleware() needs no route
+        // re-registration.
+        if (empty($guards) && ! in_array(self::class, app(Refilament::class)->panel()->getAuthMiddleware(), true)) {
             return $next($request);
         }
 

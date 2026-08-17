@@ -5,7 +5,8 @@ import { GalleryVerticalEnd } from 'lucide-react';
 import GlobalSearch from '@/components/search/GlobalSearch';
 import NotificationsBell from '@/components/shell/NotificationsBell';
 import PanelSidebar, { iconFor, type PanelConfig } from '@/components/shell/PanelSidebar';
-import { ShellSlot } from '@/components/shell/ShellSlots';
+import { SHELL_SLOTS, ShellSlot } from '@/components/shell/ShellSlots';
+import UserMenu from '@/components/shell/UserMenu';
 import ThemeToggle from '@/components/theme/ThemeToggle';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { panelUrl } from '@/lib/panel';
@@ -40,39 +41,61 @@ export default function AppShell({ children }: PropsWithChildren) {
 
     if (panel?.topNavigation) {
         return (
-            <div className="flex min-h-svh w-full flex-col" style={style}>
-                <TopNav panel={panel} currentUrl={url} />
+            <>
+                <ShellSlot name={SHELL_SLOTS.layoutStart} />
+                <div className="flex min-h-svh w-full flex-col" style={style}>
+                    <TopNav panel={panel} currentUrl={url} />
 
-                <main className="flex flex-1 flex-col gap-4 p-4 pt-6 sm:p-6">
-                    <ShellSlot name="page-start" />
-                    {children}
-                </main>
-            </div>
+                    <ShellSlot name={SHELL_SLOTS.contentBefore} />
+                    <main className="flex flex-1 flex-col gap-4 p-4 pt-6 sm:p-6">
+                        <ShellSlot name={SHELL_SLOTS.contentStart} />
+                        <ShellSlot name={SHELL_SLOTS.pageStart} />
+                        {children}
+                        <ShellSlot name={SHELL_SLOTS.pageEnd} />
+                        <ShellSlot name={SHELL_SLOTS.contentEnd} />
+                        <ShellSlot name={SHELL_SLOTS.footer} />
+                    </main>
+                    <ShellSlot name={SHELL_SLOTS.contentAfter} />
+                </div>
+                <ShellSlot name={SHELL_SLOTS.layoutEnd} />
+            </>
         );
     }
 
     return (
         <SidebarProvider>
+            <ShellSlot name={SHELL_SLOTS.layoutStart} />
             <div className="flex min-h-svh w-full" style={style}>
                 <PanelSidebar />
 
                 <SidebarInset>
+                    <ShellSlot name={SHELL_SLOTS.topbarBefore} />
                     <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4">
+                        <ShellSlot name={SHELL_SLOTS.topbarStart} />
                         <SidebarTrigger className="-ml-1" />
                         <div className="ml-auto flex items-center gap-1">
                             <GlobalSearch />
                             <ThemeToggle />
                             <NotificationsBell />
-                            <ShellSlot name="topbar-end" />
+                            <UserMenu />
+                            <ShellSlot name={SHELL_SLOTS.topbarEnd} />
                         </div>
                     </header>
+                    <ShellSlot name={SHELL_SLOTS.topbarAfter} />
 
+                    <ShellSlot name={SHELL_SLOTS.contentBefore} />
                     <main className="flex flex-1 flex-col gap-4 p-4 pt-0 sm:p-6 sm:pt-4">
-                        <ShellSlot name="page-start" />
+                        <ShellSlot name={SHELL_SLOTS.contentStart} />
+                        <ShellSlot name={SHELL_SLOTS.pageStart} />
                         {children}
+                        <ShellSlot name={SHELL_SLOTS.pageEnd} />
+                        <ShellSlot name={SHELL_SLOTS.contentEnd} />
+                        <ShellSlot name={SHELL_SLOTS.footer} />
                     </main>
+                    <ShellSlot name={SHELL_SLOTS.contentAfter} />
                 </SidebarInset>
             </div>
+            <ShellSlot name={SHELL_SLOTS.layoutEnd} />
         </SidebarProvider>
     );
 }
@@ -87,6 +110,7 @@ export default function AppShell({ children }: PropsWithChildren) {
 function TopNav({ panel, currentUrl }: { panel: PanelConfig; currentUrl: string }) {
     return (
         <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-4 border-b bg-background px-4">
+            <ShellSlot name={SHELL_SLOTS.topbarStart} />
             <Link href={panel.dashboardUrl} className="flex items-center gap-2">
                 <div className="flex aspect-square size-7 items-center justify-center overflow-hidden rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
                     {panel.brandLogo ? (
@@ -116,7 +140,8 @@ function TopNav({ panel, currentUrl }: { panel: PanelConfig; currentUrl: string 
                 <GlobalSearch />
                 <ThemeToggle />
                 <NotificationsBell />
-                <ShellSlot name="topbar-end" />
+                <UserMenu />
+                <ShellSlot name={SHELL_SLOTS.topbarEnd} />
             </div>
         </header>
     );

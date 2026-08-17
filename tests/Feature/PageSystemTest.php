@@ -13,6 +13,7 @@ use Refilament\Refilament\Resources\Resource;
 use Refilament\Refilament\Schemas\Schema;
 use Refilament\Refilament\Tables\Table;
 use Workbench\App\Models\Post;
+use Workbench\App\Refilament\Resources\Pages\ListPosts;
 use Workbench\App\Refilament\Resources\Pages\PostStats;
 use Workbench\App\Refilament\Resources\PostResource;
 
@@ -20,7 +21,11 @@ it('declares the built-in pages by default and keeps custom slots', function () 
     $pages = PostResource::getPages();
 
     expect($pages)->toHaveKeys(['index', 'create', 'edit', 'view', 'stats']);
-    expect($pages['index']->getPage())->toBe(ListRecords::class);
+    // The index slot is the generated-style Pages/ListPosts class (slice
+    // 1.10), which extends the built-in ListRecords and carries the default
+    // CreateAction header action.
+    expect($pages['index']->getPage())->toBe(ListPosts::class);
+    expect(is_subclass_of(ListPosts::class, ListRecords::class))->toBeTrue();
     expect($pages['create']->getPage())->toBe(CreateRecord::class);
     expect($pages['edit']->getPage())->toBe(EditRecord::class);
     expect($pages['view']->getPage())->toBe(ViewRecord::class);

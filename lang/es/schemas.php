@@ -10,54 +10,41 @@
  * "refilament::" in this package.
  */
 
-return array (
-  'callout' => 
-  array (
-    'statuses' => 
-    array (
-      'danger' => 'Error:',
-      'info' => 'Nota:',
-      'success' => 'Éxito:',
-      'warning' => 'Advertencia:',
-    ),
-  ),
-  'section' => 
-  array (
-    'actions' => 
-    array (
-      'collapse' => 
-      array (
-        'label' => 'Contraer sección',
-      ),
-      'expand' => 
-      array (
-        'label' => 'Expandir sección',
-      ),
-    ),
-  ),
-  'wizard' => 
-  array (
-    'actions' => 
-    array (
-      'previous_step' => 
-      array (
-        'label' => 'Anterior',
-      ),
-      'next_step' => 
-      array (
-        'label' => 'Siguiente',
-      ),
-    ),
-    'header' => 
-    array (
-      'step' => 
-      array (
-        'statuses' => 
-        array (
-          'completed' => 'Completado',
-          'upcoming' => 'No completado',
-        ),
-      ),
-    ),
-  ),
-);
+return [
+    'callout' => [
+        'statuses' => [
+            'danger' => 'Error:',
+            'info' => 'Nota:',
+            'success' => 'Éxito:',
+            'warning' => 'Advertencia:',
+        ],
+    ],
+    'section' => [
+        'actions' => [
+            'collapse' => [
+                'label' => 'Contraer sección',
+            ],
+            'expand' => [
+                'label' => 'Expandir sección',
+            ],
+        ],
+    ],
+    'wizard' => [
+        'actions' => [
+            'previous_step' => [
+                'label' => 'Anterior',
+            ],
+            'next_step' => [
+                'label' => 'Siguiente',
+            ],
+        ],
+        'header' => [
+            'step' => [
+                'statuses' => [
+                    'completed' => 'Completado',
+                    'upcoming' => 'No completado',
+                ],
+            ],
+        ],
+    ],
+];

@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ICONS } from '@/tables/cell';
+import { Icon } from '@/components/icon';
 import { cn } from '@/lib/utils';
 import type { StatsOverviewWidgetNode, WidgetStat } from '@/widgets/types';
 
@@ -50,14 +50,12 @@ export default function StatsOverviewWidget({ node }: { node: StatsOverviewWidge
 }
 
 function StatCard({ stat }: { stat: WidgetStat }) {
-    const Icon = stat.icon ? ICONS[stat.icon] : null;
-
     return (
         <Card className="p-5">
             <CardHeader className="gap-0 px-0">
                 <div className="flex items-center justify-between gap-3">
                     <CardTitle className="text-sm font-medium text-muted-foreground">{stat.label}</CardTitle>
-                    {Icon ? <Icon className="h-4 w-4 text-muted-foreground" /> : null}
+                    {stat.icon ? <Icon name={stat.icon} className="h-4 w-4 text-muted-foreground" /> : null}
                 </div>
             </CardHeader>
             <CardContent className="px-0">

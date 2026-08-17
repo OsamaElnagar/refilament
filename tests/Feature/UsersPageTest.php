@@ -36,9 +36,12 @@ it('serves the users page as an Inertia page with the initial payload', function
     $response->assertJsonPath('props.rows.0.password', fn (mixed $value): bool => is_string($value) && $value !== '');
     $response->assertJsonMissingPath('props.filters');
 
-    // The modal create header action (slice 1.1) and the confirmed row
-    // delete (slice 1.2).
-    $response->assertJsonPath('props.headerActions.0.name', 'create');
+    // The default page-header CreateAction (slice 1.10) — resolved to the
+    // users create page URL — and the confirmed row delete (slice 1.2). The
+    // table no longer ships its own modal create (the page header owns it).
+    $response->assertJsonPath('props.pageActions.0.name', 'create');
+    $response->assertJsonPath('props.pageActions.0.label', 'New User');
+    $response->assertJsonMissingPath('props.headerActions');
     $response->assertJsonPath('props.actions', [
         [
             'name' => 'delete',

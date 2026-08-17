@@ -34,10 +34,10 @@ class Group
 
     protected bool $isDate = false;
 
-    /** @var Closure(mixed $record): mixed|null */
+    /** @var Closure(mixed): mixed|null */
     protected ?Closure $getKeyFromRecordUsing = null;
 
-    /** @var Closure(mixed $record): mixed|null */
+    /** @var Closure(mixed): mixed|null */
     protected ?Closure $getTitleFromRecordUsing = null;
 
     final public function __construct(protected string $column) {}

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Workbench\App\Models\Post;
+use Workbench\App\Models\User;
 
 beforeEach(function () {
     Post::factory()->count(45)->create();
@@ -18,7 +19,7 @@ it('serves the first page with the table definition', function () {
     $response->assertJsonPath('perPage', 10);
     $response->assertJsonPath('total', 45);
     $response->assertJsonPath('lastPage', 5);
-    $response->assertJsonCount(8, 'columns');
+    $response->assertJsonCount(14, 'columns');
     $response->assertJsonCount(10, 'rows');
     $response->assertJsonStructure([
         'rows' => [
@@ -133,10 +134,10 @@ it('sorts rows by a relationship (dot-notation) column', function () {
     // Give users deliberately ordered names so the related column has a clear
     // expected ordering to assert against.
     $names = ['Zane', 'Ada', 'Mira'];
-    $users = collect($names)->map(fn (string $name) => \Workbench\App\Models\User::factory()->create(['name' => $name]));
+    $users = collect($names)->map(fn (string $name) => User::factory()->create(['name' => $name]));
 
     Post::query()->delete();
-$users->each(fn ($user, $index): mixed => Post::create([
+    $users->each(fn ($user, $index): mixed => Post::create([
         'user_id' => $user->id,
         'title' => "Post {$index}",
         'author' => 'A',
@@ -159,11 +160,11 @@ $users->each(fn ($user, $index): mixed => Post::create([
 it('searches rows by a relationship (dot-notation) column', function () {
     $needle = 'UniqueOwner';
 
-    $user = \Workbench\App\Models\User::factory()->create(['name' => "{$needle}Name"]);
+    $user = User::factory()->create(['name' => "{$needle}Name"]);
 
     Post::factory()->create(['user_id' => $user->id, 'author' => 'A', 'status' => 'draft']);
 
-$response = $this->getJson('/refilament/table/posts?search='.$needle);
+    $response = $this->getJson('/refilament/table/posts?search='.$needle);
 
     $response->assertOk();
     expect($response->json('rows'))->not->toBeEmpty();
@@ -230,7 +231,7 @@ it('formats published_at as a pre-formatted date string', function () {
 it('serializes the filters in the definition', function () {
     $filters = $this->getJson('/refilament/table/posts')->json('filters');
 
-    expect($filters)->toBe([
+    expect(array_slice($filters, 0, 3))->toBe([
         [
             'name' => 'status',
             'label' => 'Status',
@@ -259,6 +260,18 @@ it('serializes the filters in the definition', function () {
             ],
         ],
     ]);
+
+    // The relationship filter serializes options resolved from the related
+    // records — one per user, keyed by the user id and labelled by name.
+    $userFilter = $filters[3];
+    expect($userFilter['name'])->toBe('user');
+    expect($userFilter['label'])->toBe('User');
+    expect($userFilter['type'])->toBe('select');
+    expect($userFilter['multiple'])->toBeTrue();
+    expect($userFilter['options'])->toHaveCount(User::query()->count());
+
+    $user = User::query()->first();
+    expect($userFilter['options'])->toContain(['value' => (string) $user->id, 'label' => $user->name]);
 });
 
 it('narrows the rows to a global search term', function () {
@@ -334,6 +347,33 @@ it('marks a multiple filter in the definition', function () {
     $filters = $this->getJson('/refilament/table/posts')->json('filters');
 
     expect($filters[0]['multiple'])->toBeTrue();
+});
+
+it('applies a relationship filter against the related records', function () {
+    $user = User::query()->first();
+    $expected = Post::query()->where('user_id', $user->id)->count();
+
+    $response = $this->getJson('/refilament/table/posts?filter[user][]='.$user->id.'&perPage=50');
+
+    $response->assertOk();
+    expect($response->json('total'))->toBe($expected);
+    expect(array_values(array_unique(array_column($response->json('rows'), 'user.name'))))->toBe([$user->name]);
+});
+
+it('matches several related records with WHERE IN', function () {
+    $users = User::query()->limit(2)->get();
+    $ids = $users->pluck('id')->all();
+    $expected = Post::query()->whereIn('user_id', $ids)->count();
+
+    $response = $this->getJson('/refilament/table/posts?filter[user][]='.$ids[0].'&filter[user][]='.$ids[1].'&perPage=50');
+
+    $response->assertOk();
+    expect($response->json('total'))->toBe($expected);
+
+    $names = array_values(array_unique(array_column($response->json('rows'), 'user.name')));
+    sort($names);
+
+    expect($names)->toBe($users->pluck('name')->sort()->values()->all());
 });
 
 it('applies a text filter as a LIKE containment match', function () {
@@ -442,7 +482,16 @@ it('serializes the registered groups in the definition', function () {
 });
 
 it('orders grouped rows contiguously by the group column', function () {
-    $response = $this->getJson('/refilament/table/posts?group=status');
+    // Deterministic data — three statuses, five rows each — so the whole set
+    // splits into exactly three contiguous runs regardless of what earlier
+    // tests in the random order left behind (the suite shares one test DB).
+    Post::query()->delete();
+
+    foreach (['archived', 'draft', 'published'] as $status) {
+        Post::factory()->count(5)->create(['status' => $status]);
+    }
+
+    $response = $this->getJson('/refilament/table/posts?group=status&perPage=50');
 
     $response->assertOk();
     $response->assertJsonPath('activeGroup', 'status');
@@ -456,10 +505,10 @@ it('orders grouped rows contiguously by the group column', function () {
         }
     }
 
-    // Default sort is published_at desc, so without grouping the page would
-    // fragment — grouping must take precedence so each page holds a single,
-    // contiguous run (mirrors Filament's group-before-sort ordering).
-    expect($runs)->toBe(1);
+    // Default sort is published_at desc, so without grouping the set would
+    // fragment — grouping must take precedence so each group's rows form a
+    // single, contiguous run (mirrors Filament's group-before-sort ordering).
+    expect($runs)->toBe(3);
 });
 
 it('annotates each grouped row with a group key and title', function () {
@@ -533,17 +582,38 @@ it('serializes the actions in the definition', function () {
             'type' => 'edit',
             'schema' => 'post-form',
         ],
-        ['name' => 'publish', 'label' => 'Publish', 'color' => 'success'],
+        [
+            'name' => 'more',
+            'label' => 'More',
+            'group' => true,
+            'items' => [
+                [
+                    'name' => 'publish',
+                    'label' => 'Publish',
+                    'color' => 'success',
+                    'icon' => 'check-circle',
+                ],
+                [
+                    'name' => 'archive',
+                    'label' => 'Archive',
+                    'color' => 'warning',
+                    'icon' => 'archive',
+                ],
+            ],
+        ],
         [
             'name' => 'delete',
             'label' => 'Delete',
             'color' => 'danger',
             'requiresConfirmation' => true,
+            'icon' => 'trash',
+            'modalHeading' => 'Delete record',
+            'modalDescription' => 'This action cannot be undone.',
         ],
     ]);
 });
 
-it('carries only visible action names per row', function () {
+it('carries only visible action names per row, including group members', function () {
     $published = Post::factory()->create(['status' => 'published']);
     $draft = Post::factory()->create(['status' => 'draft']);
 
@@ -551,8 +621,18 @@ it('carries only visible action names per row', function () {
 
     $rows = collect($response->json('rows'))->keyBy('id');
 
-    expect($rows[$published->id]['actions'])->toBe(['edit', 'delete']);
-    expect($rows[$draft->id]['actions'])->toBe(['edit', 'publish', 'delete']);
+    // Published posts can be archived (group member visible) but not published.
+    expect($rows[$published->id]['actions'])->toBe([
+        'edit',
+        ['name' => 'more', 'items' => ['archive']],
+        'delete',
+    ]);
+    // Draft posts can be published but not archived.
+    expect($rows[$draft->id]['actions'])->toBe([
+        'edit',
+        ['name' => 'more', 'items' => ['publish']],
+        'delete',
+    ]);
 });
 
 it('runs the publish action', function () {
@@ -614,3 +694,66 @@ it('validates the query parameters', function () {
     $this->getJson('/refilament/table/posts?perPage=0')->assertStatus(422);
 });
 
+it('updates a toggle column through the record-column endpoint', function () {
+    $post = Post::factory()->create(['status' => 'draft']);
+
+    $response = $this->postJson("/refilament/table/posts/record/{$post->id}/column/published", ['value' => true]);
+
+    $response->assertOk();
+    $response->assertJson(['success' => true, 'data' => ['value' => true]]);
+    expect($post->fresh()->status)->toBe('published');
+});
+
+it('turns a toggle column off through the record-column endpoint', function () {
+    $post = Post::factory()->create(['status' => 'published']);
+
+    $response = $this->postJson("/refilament/table/posts/record/{$post->id}/column/published", ['value' => false]);
+
+    $response->assertOk();
+    $response->assertJson(['success' => true, 'data' => ['value' => false]]);
+    expect($post->fresh()->status)->toBe('draft');
+});
+
+it('rejects an inline edit to an unknown column', function () {
+    $post = Post::factory()->create();
+
+    $this->postJson("/refilament/table/posts/record/{$post->id}/column/nope", ['value' => true])->assertNotFound();
+});
+
+it('rejects an inline edit to a non-editable column', function () {
+    $post = Post::factory()->create();
+
+    $this->postJson("/refilament/table/posts/record/{$post->id}/column/title", ['value' => 'Nope'])
+        ->assertStatus(422)
+        ->assertJson(['error' => 'Column is not editable.']);
+
+    expect($post->fresh()->title)->not->toBe('Nope');
+});
+
+it('rejects an inline edit on an unknown table', function () {
+    $this->postJson('/refilament/table/missing/record/1/column/published', ['value' => true])->assertNotFound();
+});
+
+it('rejects an inline edit on a missing record', function () {
+    $this->postJson('/refilament/table/posts/record/999999/column/published', ['value' => true])->assertNotFound();
+});
+
+it('updates a select column through the record-column endpoint', function () {
+    $post = Post::factory()->create(['status' => 'draft']);
+
+    $response = $this->postJson("/refilament/table/posts/record/{$post->id}/column/status_select", ['value' => 'archived']);
+
+    $response->assertOk();
+    $response->assertJson(['success' => true, 'data' => 'archived']);
+    expect($post->fresh()->status)->toBe('archived');
+});
+
+it('updates a text column through the record-column endpoint', function () {
+    $post = Post::factory()->create(['views' => 10]);
+
+    $response = $this->postJson("/refilament/table/posts/record/{$post->id}/column/views_edit", ['value' => 42]);
+
+    $response->assertOk();
+    $response->assertJson(['success' => true, 'data' => 42]);
+    expect($post->fresh()->views)->toBe(42);
+});

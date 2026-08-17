@@ -236,7 +236,7 @@ export default function ActionModal({ action, open, onClose, onSucceeded, record
                         schemaId={doc.id}
                         submitLabel={action.label}
                         submitUrl={isEdit
-                            ? submitUrl ?? `/refilament/table/${tableId}/action/${action.name}`
+                            ? submitUrl ?? panelUrl(`/table/${tableId}/action/${action.name}`)
                             : submitUrl}
                         submitRecord={isEdit ? recordId : undefined}
                         operation={operation}

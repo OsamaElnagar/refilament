@@ -43,6 +43,13 @@ interface SchemaRendererProps {
      * type and the create/edit pages supply it.
      */
     operation?: string;
+    /**
+     * Fired with the next values on every change. The page-form component
+     * (page-forms slice) uses it to track dirty state for its unsaved-
+     * changes navigation guard. Idempotent by nature — consumers should
+     * treat it as a signal, never a source of truth.
+     */
+    onValuesChange?: (values: Record<string, unknown>) => void;
 }
 
 export default function SchemaRenderer({
@@ -56,6 +63,7 @@ export default function SchemaRenderer({
     submitRecordInUrl,
     onSuccess,
     operation,
+    onValuesChange,
 }: SchemaRendererProps) {
     const [values, setValues] = useState<Record<string, unknown>>(data);
 
@@ -226,7 +234,11 @@ export default function SchemaRenderer({
         ) : null;
 
     const handleChange = (name: string) => (value: unknown): void => {
+        // The functional update keeps rapid successive edits consistent;
+        // onValuesChange is fired with the same next values so the dirty
+        // tracking (page-forms slice) never lags a batched change.
         setValues((current) => ({ ...current, [name]: value }));
+        onValuesChange?.({ ...values, [name]: value });
         clearFieldError(name);
     };
 
@@ -281,6 +293,7 @@ export default function SchemaRenderer({
                 checking={checking[node.name]}
                 onChange={handleChange(node.name)}
                 formValues={resolvedValues}
+                errors={fieldErrors}
             />
         );
     };
@@ -297,13 +310,13 @@ export default function SchemaRenderer({
     }
 
     return (
-        <form className="space-y-6" onSubmit={handleSubmit} noValidate>
+        <form className="space-y-4" onSubmit={handleSubmit} noValidate>
             {fields}
 
             {submitError ? (
                 <div
                     role="alert"
-                    className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700"
+                    className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-sm text-red-700"
                 >
                     <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0" aria-hidden="true">
                         <path
@@ -316,10 +329,10 @@ export default function SchemaRenderer({
                 </div>
             ) : null}
 
-            {successMessage ? (
+{successMessage ? (
                 <div
                     role="status"
-                    className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-700"
+                    className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-sm text-emerald-700"
                 >
                     <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0" aria-hidden="true">
                         <path

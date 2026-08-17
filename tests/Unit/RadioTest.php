@@ -43,7 +43,7 @@ it('inherits the shared field config', function () {
     $node = Radio::make('visibility')
         ->label('Visibility')
         ->helperText('Who can see this post')
-        ->validation(['required', 'in:public,members,private'])
+        ->rules(['required', 'in:public,members,private'])
         ->required()
         ->toArray();
 

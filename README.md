@@ -98,7 +98,7 @@ class RefilamentPanelProvider extends PanelProvider
             // ->authMiddleware([Authenticate::class])  // turn the access gate on
             // ->loginUrl('/login')
             // ->widgets([StatsOverview::class])
-            // ->renderHook('sidebar-footer', 'my-component')
+            // ->renderHook(PanelsRenderHook::SidebarFooter, view('sidebar-footer'))
             // ->databaseNotifications()
             ;
     }
@@ -191,7 +191,7 @@ npm run dev            # workbench Vite dev server (hot reload)
 composer serve         # workbench app at http://127.0.0.1:8000
 ```
 
-Run the test suite with `composer test` (PHPStan + Pint + Pest, 573 tests green).
+Run the test suite with `composer test` (PHPStan + Pint + Pest, 1002 tests green).
 
 ## Changelog
 
@@ -199,7 +199,7 @@ Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed re
 
 ## Beta status
 
-The current engine is feature-complete against the MVP roadmap and ships as `v0.1.1-beta.1`:
+The current engine is feature-complete against the MVP roadmap and ships as `v0.2.0`:
 installable, with a prebuilt bundle, generator commands and a documented contract. The remaining
 work before a stable v1 is consumer hardening — see `docs/ROADMAP.md` Phase 5 (plugin contract, CI
 matrix, `vendor:publish` consumer smoke test) — plus the deferred items listed in the roadmap.

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Refilament\Refilament\Resources\Pages;
 
+use Refilament\Refilament\Actions\Action;
+use Refilament\Refilament\Actions\CreateAction;
 use Refilament\Refilament\Refilament;
 
 /**
@@ -15,9 +17,33 @@ use Refilament\Refilament\Refilament;
  */
 class ListRecords extends Page
 {
+    /**
+     * The page's own crumb in breadcrumbs (slice 1.11) — "List", matching
+     * Filament's list-records breadcrumb default. The resource crumb (the
+     * list page itself) leads it.
+     */
+    protected static ?string $breadcrumb = 'List';
+
     public static function getInertiaComponent(): string
     {
         return 'refilament/resource-table';
+    }
+
+    /**
+     * The default header actions for a resource's list page (slice 1.10):
+     * the CreateAction — mirroring Filament, where the generated list page
+     * ships `getHeaderActions()` returning `CreateAction::make()`. Ours
+     * defaults at the base so every resource gets the button even without a
+     * generated page class; a generated (or hand-written) list page overrides
+     * this method to add more actions beside it. The page serializer resolves
+     * the label, the create-page URL (or modal fallback) and the create
+     * authorization gate at request time.
+     *
+     * @return array<int, Action>
+     */
+    protected static function getHeaderActions(string $resource): array
+    {
+        return [CreateAction::make()];
     }
 
     public static function getPayload(string $resource, Refilament $refilament, ?string $record = null): array

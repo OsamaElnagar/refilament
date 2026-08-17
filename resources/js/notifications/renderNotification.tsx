@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { toast } from 'sonner';
 
-import { ICONS } from '@/tables/cell';
+import { Icon } from '@/components/icon';
 
 /**
  * A serialized server notification (slice 3.4; docs/CONTRACT.md,
@@ -41,11 +41,7 @@ export function renderNotification(notification: NotificationPayload): void {
     }
 
     if (notification.icon) {
-        const Icon = ICONS[notification.icon];
-
-        if (Icon) {
-            options.icon = <Icon className="size-4" />;
-        }
+        options.icon = <Icon name={notification.icon} className="size-4" />;
     }
 
     if (notification.duration !== undefined) {

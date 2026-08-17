@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Refilament\Refilament\GlobalSearch;
 
-use Refilament\Refilament\Tables\Action;
+use Refilament\Refilament\Actions\Action;
 
 /**
  * One match in the panel's global search results (slice 3.5) — mirrors

@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
+use Refilament\Refilament\Actions\Action;
 use Refilament\Refilament\Schemas\Components\Component;
-use Refilament\Refilament\Tables\Action;
 
 function demoTextInput(?string $name = null): Component
 {
@@ -33,7 +33,7 @@ it('serializes a configured component to its contract node', function () {
         ->placeholder('My post title')
         ->helperText('Shown in lists and feeds')
         ->required()
-        ->validation(['required', 'max:255'])
+        ->rules(['required', 'max:255'])
         ->maxLength(255)
         ->columnSpan(2)
         ->toArray();

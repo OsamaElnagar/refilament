@@ -40,16 +40,16 @@ export default function ToggleField({ node, value, error, onChange }: FieldProps
                 </div>
             ) : (
                 <>
-                    <Label htmlFor={node.name} className="mb-1.5 block text-sm font-medium">
+                    <Label htmlFor={node.name} className="mb-1 block text-sm font-medium">
                         {label}
                     </Label>
                     {control}
                 </>
             )}
 
-            {node.helperText ? <p className="mt-1.5 text-xs text-muted-foreground">{node.helperText}</p> : null}
+            {node.helperText ? <p className="mt-0.5 text-xs text-muted-foreground">{node.helperText}</p> : null}
 
-            {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
+            {error ? <p className="mt-0.5 text-xs text-destructive">{error}</p> : null}
         </div>
     );
 }

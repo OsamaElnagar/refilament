@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace {{ namespace }};
 
-use Refilament\Refilament\Schemas\Components\TextInput;
-use Refilament\Refilament\Schemas\Schema;
+{{ fieldImports }}use Refilament\Refilament\Schemas\Schema;
 
 class {{ class }}
 {

@@ -20,7 +20,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import { readCsrfToken } from '@/lib/csrf';
 import { panelUrl } from '@/lib/panel';
-import { ICONS } from '@/tables/cell';
+import { SHELL_SLOTS, ShellSlot } from '@/components/shell/ShellSlots';
+import { Icon } from '@/components/icon';
 import { renderNotification } from '@/notifications/renderNotification';
 import type { NotificationPayload } from '@/notifications/renderNotification';
 
@@ -62,16 +63,10 @@ interface SearchResponse {
 
 const DEBOUNCE_MS = 300;
 
-/** Render a named action icon through the shared lucide registry (cell.tsx).
+/** Render a named action icon through the shared registry (components/icon).
  * Unknown keys render nothing, exactly like cells, badges and notifications. */
 function ActionIcon({ name }: { name: string }) {
-    const Icon = ICONS[name];
-
-    if (!Icon) {
-        return null;
-    }
-
-    return <Icon className="size-3 shrink-0" aria-hidden="true" />;
+    return <Icon name={name} className="size-3 shrink-0" />;
 }
 
 /**
@@ -243,6 +238,7 @@ export default function GlobalSearch() {
 
     return (
         <div className="flex items-center">
+            <ShellSlot name={SHELL_SLOTS.globalSearchStart} />
             <Button
                 variant="outline"
                 className="h-9 w-56 justify-start gap-2 text-muted-foreground"
@@ -421,6 +417,7 @@ export default function GlobalSearch() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+            <ShellSlot name={SHELL_SLOTS.globalSearchEnd} />
         </div>
     );
 }

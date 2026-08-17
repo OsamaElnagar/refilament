@@ -99,7 +99,7 @@ export default function TextInputField({ node, value, error, checking, onChange,
                 ) : null}
             </div>
 
-            {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
+            {error ? <p className="mt-0.5 text-xs text-destructive">{error}</p> : null}
         </div>
     );
 }

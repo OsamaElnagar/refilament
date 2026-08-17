@@ -36,10 +36,10 @@ export default function RadioField({ node, value, error, onChange }: FieldProps)
     return (
         <div>
             {node.inline ? (
-                <div className="flex items-start gap-2">
+                <div className="flex items-start gap-1">
                     <span className="pt-0.5 text-sm font-medium">{label}</span>
                     <fieldset role="radiogroup" aria-invalid={error ? true : undefined} className="flex-1">
-                        <div className={cn('grid gap-x-6 gap-y-1.5', gridClass)}>
+<div className={cn('grid gap-x-3 gap-y-1', gridClass)}>
                             {options.map((option) => (
                                 <label
                                     key={option.value}
@@ -63,7 +63,7 @@ export default function RadioField({ node, value, error, onChange }: FieldProps)
                 </div>
             ) : (
                 <fieldset role="radiogroup" aria-invalid={error ? true : undefined}>
-                    <Label className="mb-1.5 block text-sm font-medium">{label}</Label>
+                    <Label className="mb-1 block text-sm font-medium">{label}</Label>
 
                     <div className={cn('grid gap-x-6 gap-y-1.5', gridClass)}>
                         {options.map((option) => (
@@ -88,9 +88,9 @@ export default function RadioField({ node, value, error, onChange }: FieldProps)
                 </fieldset>
             )}
 
-            {node.helperText ? <p className="mt-1.5 text-xs text-muted-foreground">{node.helperText}</p> : null}
+            {node.helperText ? <p className="mt-0.5 text-xs text-muted-foreground">{node.helperText}</p> : null}
 
-            {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
+            {error ? <p className="mt-0.5 text-xs text-destructive">{error}</p> : null}
         </div>
     );
 }

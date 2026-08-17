@@ -15,10 +15,18 @@
                  Vite build/manifest via @vite (npm run dev / npm run build). --}}
         @php
             $publishedAssets = file_exists(public_path('vendor/refilament/refilament.js'));
+
+            // Cache-bust the published bundle: the asset URL is otherwise
+            // stable, so a republished bundle would keep serving from the
+            // browser cache. Appending the file's mtime forces a refetch
+            // exactly when the file changes.
+            $assetVersion = $publishedAssets
+                ? (string) filemtime(public_path('vendor/refilament/refilament.js'))
+                : null;
         @endphp
 
         @if ($publishedAssets)
-            <link rel="stylesheet" href="{{ asset('vendor/refilament/refilament.css') }}">
+            <link rel="stylesheet" href="{{ asset('vendor/refilament/refilament.css').($assetVersion !== null ? '?v='.$assetVersion : '') }}">
         @else
             @viteReactRefresh
             @vite(['resources/css/app.css', 'resources/js/app.tsx'])
@@ -32,7 +40,7 @@
         <x-inertia::app />
 
         @if ($publishedAssets)
-            <script src="{{ asset('vendor/refilament/refilament.js') }}" defer></script>
+            <script src="{{ asset('vendor/refilament/refilament.js').($assetVersion !== null ? '?v='.$assetVersion : '') }}" defer></script>
         @endif
     </body>
 </html>

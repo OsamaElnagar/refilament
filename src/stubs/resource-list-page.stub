@@ -1,0 +1,36 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use {{ resourceFqn }};
+use Refilament\Refilament\Actions\Action;
+use Refilament\Refilament\Actions\CreateAction;
+use Refilament\Refilament\Resources\Pages\ListRecords;
+
+class {{ class }} extends ListRecords
+{
+    /**
+     * The resource this page belongs to.
+     *
+     * @var class-string<{{ resourceShort }}>|null
+     */
+    protected static ?string $resource = {{ resourceShort }}::class;
+
+    /**
+     * Header actions (docs/ROADMAP.md "1.10 Page header actions") — the
+     * default CreateAction renders top-right of the list page: it navigates
+     * to the create page when the resource registers one, and falls back to a
+     * modal hosting the resource's form otherwise. Add more actions here to
+     * sit beside it.
+     *
+     * @return array<int, Action>
+     */
+    protected static function getHeaderActions(string $resource): array
+    {
+        return [
+            CreateAction::make(),
+        ];
+    }
+}

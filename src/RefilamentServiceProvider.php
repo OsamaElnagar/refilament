@@ -7,11 +7,16 @@ namespace Refilament\Refilament;
 use Illuminate\Support\ServiceProvider;
 use Inertia\Inertia;
 use Refilament\Refilament\Console\Commands\InstallCommand;
+use Refilament\Refilament\Console\Commands\MakeClusterCommand;
 use Refilament\Refilament\Console\Commands\MakePageCommand;
 use Refilament\Refilament\Console\Commands\MakeResourceCommand;
+use Refilament\Refilament\Console\Commands\MakeSingularResourceCommand;
 use Refilament\Refilament\Console\Commands\RefilamentCommand;
 use Refilament\Refilament\GlobalSearch\Providers\Contracts\GlobalSearchProvider;
 use Refilament\Refilament\GlobalSearch\Providers\DefaultGlobalSearchProvider;
+use Refilament\Refilament\Support\Colors\ColorManager;
+use Refilament\Refilament\Support\Icons\Heroicon;
+use Refilament\Refilament\Support\Icons\IconManager;
 
 class RefilamentServiceProvider extends ServiceProvider
 {
@@ -22,6 +27,15 @@ class RefilamentServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/refilament.php', 'refilament');
 
+        // Fortify is the panel's auth engine (docs/ROADMAP.md "1.9 auth
+        // pages"), but the panel owns the routes — unless the consumer has
+        // published their own fortify config (they own Fortify then), keep
+        // Fortify's own view routes from registering at the app root, where
+        // they would render a missing Blade view on /login.
+        if (! file_exists(config_path('fortify.php'))) {
+            config(['fortify.views' => false]);
+        }
+
         $this->app->singleton(Refilament::class);
 
         // The global search provider (slice 3.5) — bound to the default
@@ -29,6 +43,22 @@ class RefilamentServiceProvider extends ServiceProvider
         $this->app->bind(
             GlobalSearchProvider::class,
             fn (): DefaultGlobalSearchProvider => new DefaultGlobalSearchProvider($this->app->make(Refilament::class)),
+        );
+
+        // The icon registry behind the `RefilamentIcon` facade (slice —
+        // mirrors Filament's scoped `IconManager`). Scoped so a per-request
+        // registration never leaks across requests.
+        $this->app->scoped(
+            IconManager::class,
+            fn (): IconManager => new IconManager,
+        );
+
+        // The named-color registry behind the `RefilamentColor` facade
+        // (mirrors Filament's scoped `ColorManager`). Scoped so a per-request
+        // registration never leaks across requests.
+        $this->app->scoped(
+            ColorManager::class,
+            fn (): ColorManager => new ColorManager,
         );
     }
 
@@ -46,6 +76,15 @@ class RefilamentServiceProvider extends ServiceProvider
             (string) config('refilament.resources.namespace'),
         );
 
+        // Seed the icon registry with the default catalog so the facade
+        // resolves every known canonical key out of the box. Aliases can be
+        // overridden by consumers via `RefilamentIcon::register(...)`.
+        $this->app->make(IconManager::class)->register(
+            collect(Heroicon::cases())
+                ->mapWithKeys(fn (Heroicon $icon): array => [$icon->value => $icon])
+                ->all(),
+        );
+
         // Register every package route and page route under the panel's URL
         // prefix. This runs from a `booted()` hook — after every provider has
         // registered and booted — so a consumer's PanelProvider (which
@@ -57,6 +96,7 @@ class RefilamentServiceProvider extends ServiceProvider
         $this->app->booted(static function () use ($refilament): void {
             $refilament->registerRoutes();
             $refilament->registerPageRoutes();
+            $refilament->registerAuthRoutes();
         });
 
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'refilament');
@@ -68,7 +108,23 @@ class RefilamentServiceProvider extends ServiceProvider
         // reassembled on every request so registered resources are reflected.
         // The lazily-built panel is resolved per-request so sharing it here —
         // before the console guard below — also serves it to web requests.
-        Inertia::share('refilament', static fn () => ['panel' => $refilament->panel()->toArray()]);
+        // The authenticated user (name/email) rides along under `user` so the
+        // shell's user menu can greet and identify the visitor; it's absent
+        // entirely for guests, so the menu simply doesn't render.
+        Inertia::share('refilament', static function () use ($refilament): array {
+            $user = $refilament->authorizationUser();
+
+            /** @var object{name?: mixed, email?: mixed}|null $u */
+            $u = $user;
+
+            return [
+                'panel' => $refilament->panel()->toArray(),
+                ...($u !== null ? ['user' => [
+                    'name' => (string) ($u->name ?? ''),
+                    'email' => (string) ($u->email ?? ''),
+                ]] : []),
+            ];
+        });
 
         if (! $this->app->runningInConsole()) {
             return;
@@ -96,8 +152,10 @@ class RefilamentServiceProvider extends ServiceProvider
 
         $this->commands([
             InstallCommand::class,
+            MakeClusterCommand::class,
             MakePageCommand::class,
             MakeResourceCommand::class,
+            MakeSingularResourceCommand::class,
             RefilamentCommand::class,
         ]);
     }

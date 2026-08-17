@@ -7,6 +7,7 @@ namespace Refilament\Refilament\Http\Controllers;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use LogicException;
 use Refilament\Refilament\Http\Concerns\ValidatesSchemaData;
@@ -368,6 +369,73 @@ class TableController
         }
 
         return response()->json(['data' => $this->serializeRecordData($schema, $model)]);
+    }
+
+    /**
+     * Update one column of one record inline (slice: editable columns;
+     * docs/CONTRACT.md, "Editable columns"). The client's inline control
+     * (checkbox/switch/select/text input) posts the new value here — a
+     * stateless request/response, the honest rebuild of Filament's Livewire
+     * inline edits. The column must be editable; the value is validated
+     * against the column's declared rules and persisted via the column's
+     * update handler (default: mass-assign to the named attribute). The fresh
+     * cell value is returned so the client can reconcile optimistically.
+     *
+     * Body: { "value": <any> }
+     * OK:   200 { "success": true, "data": { ...fresh cell } }
+     * Fails: 422 { "errors": { "<column>": ["..."] } }
+     */
+    public function updateColumn(Request $request, Refilament $refilament, string $table, string $record, string $column): JsonResponse
+    {
+        $resolved = $refilament->resolveTable($table);
+
+        if ($resolved === null) {
+            return response()->json(['error' => 'Unknown table.'], JsonResponse::HTTP_NOT_FOUND);
+        }
+
+        $columnInstance = $resolved->findColumn($column);
+
+        if ($columnInstance === null) {
+            return response()->json(['error' => 'Unknown column.'], JsonResponse::HTTP_NOT_FOUND);
+        }
+
+        if (! $columnInstance->isEditable()) {
+            return response()->json(['error' => 'Column is not editable.'], JsonResponse::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $model = $resolved->findRecord($record);
+
+        if ($model === null) {
+            return response()->json(['error' => 'Record not found.'], JsonResponse::HTTP_NOT_FOUND);
+        }
+
+        if (! $columnInstance->isAuthorizedFor($model)) {
+            return response()->json(['error' => 'You are not allowed to edit this column.'], JsonResponse::HTTP_FORBIDDEN);
+        }
+
+        $value = $request->input('value');
+
+        $validated = Validator::make(
+            ['value' => $value],
+            ['value' => array_merge(['nullable'], $columnInstance->getEditRules())],
+        )->validate();
+
+        $value = $validated['value'] ?? null;
+
+        try {
+            $columnInstance->updateState($model, $value);
+        } catch (LogicException $logicException) {
+            throw $logicException;
+        } catch (Exception $exception) {
+            throw ValidationException::withMessages([
+                $column => $exception->getMessage(),
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $columnInstance->serializeCell($model),
+        ]);
     }
 
     private function isSortableColumn(Table $resolved, string $sort): bool

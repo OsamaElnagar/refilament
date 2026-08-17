@@ -11,11 +11,11 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use LogicException;
+use Refilament\Refilament\Actions\Action;
 use Refilament\Refilament\Http\Concerns\ValidatesSchemaData;
 use Refilament\Refilament\Notifications\Notification;
 use Refilament\Refilament\Refilament;
 use Refilament\Refilament\Schemas\Schema;
-use Refilament\Refilament\Tables\Action;
 use Refilament\Refilament\Tables\Table;
 
 /**

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
+    DropdownMenuGroup,
     DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuSeparator,
@@ -205,49 +206,51 @@ export default function NotificationsBell(): React.JSX.Element | null {
             />
 
             <DropdownMenuContent align="end" className="w-80">
-                <DropdownMenuLabel className="flex items-center justify-between">
-                    <span>Notifications</span>
+                <DropdownMenuGroup>
+                    <DropdownMenuLabel className="flex items-center justify-between">
+                        <span>Notifications</span>
 
-                    {unread > 0 ? (
-                        <button
-                            type="button"
-                            onClick={() => void markAllRead()}
-                            disabled={clearing}
-                            className="inline-flex items-center gap-1 text-xs font-normal text-muted-foreground transition hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-                        >
-                            {clearing ? <Loader2 className="size-3 animate-spin" aria-hidden="true" /> : <CheckCheck className="size-3" aria-hidden="true" />}
-                            Mark all read
-                        </button>
-                    ) : null}
-                </DropdownMenuLabel>
-
-                <DropdownMenuSeparator />
-
-                {items.length === 0 ? (
-                    <div className="px-3 py-8 text-center text-sm text-muted-foreground">You're all caught up.</div>
-                ) : (
-                    <div className="max-h-80 overflow-auto">
-                        {items.map((item) => (
-                            <DropdownMenuItem
-                                key={item.id}
-                                onClick={() => void markRead(item)}
-                                disabled={running === item.id}
-                                className={cn('flex-col items-start gap-0.5 py-2.5', !item.readAt && 'pr-8')}
+                        {unread > 0 ? (
+                            <button
+                                type="button"
+                                onClick={() => void markAllRead()}
+                                disabled={clearing}
+                                className="inline-flex items-center gap-1 text-xs font-normal text-muted-foreground transition hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
                             >
-                                <span className="flex w-full items-center gap-2 text-sm font-medium">
-                                    {!item.readAt ? <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" /> : null}
-                                    {item.title}
-                                </span>
+                                {clearing ? <Loader2 className="size-3 animate-spin" aria-hidden="true" /> : <CheckCheck className="size-3" aria-hidden="true" />}
+                                Mark all read
+                            </button>
+                        ) : null}
+                    </DropdownMenuLabel>
 
-                                {item.body ? <span className="text-xs text-muted-foreground">{item.body}</span> : null}
+                    <DropdownMenuSeparator />
 
-                                {item.createdAt ? (
-                                    <span className="text-xs text-muted-foreground/70">{relativeTime(item.createdAt)}</span>
-                                ) : null}
-                            </DropdownMenuItem>
-                        ))}
-                    </div>
-                )}
+                    {items.length === 0 ? (
+                        <div className="px-3 py-8 text-center text-sm text-muted-foreground">You're all caught up.</div>
+                    ) : (
+                        <div className="max-h-80 overflow-auto">
+                            {items.map((item) => (
+                                <DropdownMenuItem
+                                    key={item.id}
+                                    onClick={() => void markRead(item)}
+                                    disabled={running === item.id}
+                                    className={cn('flex-col items-start gap-0.5 py-2.5', !item.readAt && 'pr-8')}
+                                >
+                                    <span className="flex w-full items-center gap-2 text-sm font-medium">
+                                        {!item.readAt ? <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" /> : null}
+                                        {item.title}
+                                    </span>
+
+                                    {item.body ? <span className="text-xs text-muted-foreground">{item.body}</span> : null}
+
+                                    {item.createdAt ? (
+                                        <span className="text-xs text-muted-foreground/70">{relativeTime(item.createdAt)}</span>
+                                    ) : null}
+                                </DropdownMenuItem>
+                            ))}
+                        </div>
+                    )}
+                </DropdownMenuGroup>
             </DropdownMenuContent>
         </DropdownMenu>
     );

@@ -1,3 +1,4 @@
+import { router } from '@inertiajs/react';
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import type {
     CellContext,
@@ -6,7 +7,18 @@ import type {
     SortingState,
     VisibilityState,
 } from '@tanstack/react-table';
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Columns3, Search, X } from 'lucide-react';
+import {
+    ArrowDown,
+    ArrowUp,
+    ArrowUpDown,
+    ChevronLeft,
+    ChevronRight,
+    Columns3,
+    ListFilter,
+    MoreHorizontal,
+    Search,
+    X,
+} from 'lucide-react';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -26,15 +38,27 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
     DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
 import {
     Table,
     TableBody,
@@ -49,6 +73,8 @@ import { panelUrl } from '@/lib/panel';
 import { cn } from '@/lib/utils';
 import ActionModal from '@/tables/action-modal';
 import { Cell } from '@/tables/cell';
+import { ICONS } from '@/components/icon';
+import { FilterPanel, type FilterAccessors } from '@/tables/filter-panel';
 import HeaderActions from '@/tables/header-actions';
 import type {
     TableAction,
@@ -113,6 +139,151 @@ const ACTION_COLORS: Record<TableActionColor, string> = {
     warning: 'text-amber-600 hover:bg-amber-50',
     info: 'text-sky-600 hover:bg-sky-50',
 };
+
+/** Tailwind icon color classes per action color, over the ghost button. */
+const ACTION_ICON_COLORS: Record<TableActionColor, string> = {
+    primary: 'text-indigo-600 dark:text-indigo-400',
+    secondary: 'text-zinc-500 dark:text-zinc-400',
+    danger: 'text-rose-600 dark:text-rose-400',
+    success: 'text-emerald-600 dark:text-emerald-400',
+    warning: 'text-amber-600 dark:text-amber-400',
+    info: 'text-sky-600 dark:text-sky-400',
+};
+
+interface RowActionsProps {
+    row: TableRow;
+    /**
+     * The visible actions this row carries: flat action names and group
+     * entries `{ name, items }` (the server lists each group's visible
+     * members explicitly — slice 2.5).
+     */
+    entries: Array<string | { name: string; items: string[] }>;
+    actions: Map<string, TableAction>;
+    groups: TableAction[];
+    /** Composite key of the action currently running on this row. */
+    runningKey: string | null;
+    onInvoke: (row: TableRow, action: TableAction) => void;
+}
+
+/**
+ * The row's actions column (professional actions slice — docs/ROADMAP.md
+ * "2.5 Table & bulk actions"). Flat actions render as icon buttons with a
+ * tooltip (Filament's row-action pattern); a group renders as an ellipsis
+ * overflow menu holding exactly the member actions the server listed as
+ * visible for this record. The icon, color and tooltip are the serialized
+ * server-side definitions.
+ */
+function RowActions({ row, entries, actions, groups, runningKey, onInvoke }: RowActionsProps) {
+    const flat = entries
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((name) => actions.get(name))
+        .filter((action): action is TableAction => action !== undefined);
+
+    const groupEntries = entries
+        .filter((entry): entry is { name: string; items: string[] } => typeof entry !== 'string')
+        .map((entry) => {
+            const group = groups.find((candidate) => candidate.name === entry.name);
+
+            return group === undefined ? undefined : { group, visibleNames: new Set(entry.items) };
+        })
+        .filter((entry): entry is { group: TableAction; visibleNames: Set<string> } => entry !== undefined);
+
+    const renderTrigger = (action: TableAction) => {
+        const isRunning = runningKey === `${row.id}:${action.name}`;
+        const Icon = action.icon ? ICONS[action.icon] : undefined;
+
+        return (
+            <Tooltip key={action.name}>
+                <TooltipTrigger
+                    render={
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
+                            disabled={isRunning}
+                            onClick={() => onInvoke(row, action)}
+                            aria-label={action.tooltip ?? action.label}
+                        >
+                            {isRunning ? (
+                                <span className="size-3.5 animate-pulse rounded-full border-2 border-current border-t-transparent" />
+                            ) : Icon ? (
+                                <Icon
+                                    className={cn('size-3.5', ACTION_ICON_COLORS[action.color ?? 'secondary'])}
+                                    aria-hidden="true"
+                                />
+                            ) : (
+                                <span className="text-xs">{action.label}</span>
+                            )}
+                        </Button>
+                    }
+                />
+                <TooltipContent>{action.tooltip ?? action.label}</TooltipContent>
+            </Tooltip>
+        );
+    };
+
+    return (
+        <div className="flex items-center justify-end gap-0.5">
+            {flat.map((action) => renderTrigger(action))}
+            {groupEntries.map(({ group, visibleNames }) => {
+                const visibleItems = (group.items ?? []).filter((item) => visibleNames.has(item.name));
+
+                if (visibleItems.length === 0) {
+                    return null;
+                }
+
+                const GroupIcon = group.icon ? ICONS[group.icon] : MoreHorizontal;
+
+                return (
+                    <DropdownMenu key={group.name}>
+                        <DropdownMenuTrigger
+                            render={
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-6 text-muted-foreground"
+                                    aria-label={group.label}
+                                >
+                                    <GroupIcon className="size-3.5" aria-hidden="true" />
+                                </Button>
+                            }
+                        />
+                        <DropdownMenuContent align="end" className="min-w-36">
+                            {visibleItems.map((item) => {
+                                const isRunning = runningKey === `${row.id}:${item.name}`;
+                                const ItemIcon = item.icon ? ICONS[item.icon] : undefined;
+
+                                return (
+                                    <DropdownMenuItem
+                                        key={item.name}
+                                        disabled={isRunning}
+                                        onSelect={() => onInvoke(row, item)}
+                                        className={cn(
+                                            'gap-2',
+                                            item.color === 'danger' && 'text-rose-600 focus:text-rose-600 dark:text-rose-400 dark:focus:text-rose-400',
+                                        )}
+                                    >
+                                        {isRunning ? (
+                                            <span className="size-4 animate-pulse rounded-full border-2 border-current border-t-transparent" />
+                                        ) : ItemIcon ? (
+                                            <ItemIcon
+                                                className={cn('size-4', ACTION_ICON_COLORS[item.color ?? 'secondary'])}
+                                                aria-hidden="true"
+                                            />
+                                        ) : null}
+                                        {item.label}
+                                    </DropdownMenuItem>
+                                );
+                            })}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                );
+            })}
+        </div>
+    );
+}
 
 /**
  * JSON POST headers carrying the session's CSRF token — the panel routes run
@@ -373,6 +544,165 @@ function defaultUrlState(payload: TablePayload): UrlTableState {
     };
 }
 
+/**
+ * Navigate an action whose row carries a resolved per-record URL (record
+ * navigation slice) — the counterpart of the action endpoint for navigation
+ * actions (ViewAction, closure-URL actions). Returns true when the action
+ * was a navigation (handled); false when the caller should run it as a
+ * normal endpoint action instead.
+ */
+function navigateActionUrl(row: TableRow, action: TableAction): boolean {
+    const target = row.actionUrls?.[action.name];
+
+    if (!target?.url) {
+        return false;
+    }
+
+    if (target.openUrlInNewTab) {
+        window.open(target.url, '_blank', 'noopener,noreferrer');
+    } else {
+        router.visit(target.url);
+    }
+
+    return true;
+}
+
+/**
+ * Inline-editable boolean cell (slice: editable columns). Renders the shared
+ * Checkbox (kind 'checkbox') or Switch (kind 'toggle') and calls `onCommit`
+ * with the toggled value; `onColor` tints the checked state.
+ */
+const editableColorClasses: Record<string, string> = {
+    primary: 'data-[checked]:bg-primary',
+    secondary: 'data-[checked]:bg-secondary',
+    success: 'data-[checked]:bg-success',
+    danger: 'data-[checked]:bg-danger',
+    warning: 'data-[checked]:bg-warning',
+    info: 'data-[checked]:bg-info',
+};
+
+function EditableBooleanCell({
+    value,
+    column,
+    pending,
+    onCommit,
+}: {
+    value: boolean;
+    column: TableColumn;
+    pending: boolean;
+    onCommit: (next: boolean) => void;
+}) {
+    const checked = value === true;
+    const tint = column.onColor ? editableColorClasses[column.onColor] : undefined;
+
+    if (column.kind === 'toggle') {
+        return (
+            <Switch
+                checked={checked}
+                disabled={pending}
+                onCheckedChange={(next) => onCommit(next === true)}
+                className={tint}
+            />
+        );
+    }
+
+    return (
+        <Checkbox
+            checked={checked}
+            disabled={pending}
+            onCheckedChange={(next) => onCommit(next === true)}
+            className={tint}
+        />
+    );
+}
+
+/**
+ * Inline-editable select cell (slice: editable columns). Renders a compact
+ * native `<select>` over the column's options and calls `onCommit` with the
+ * chosen option value; `placeholder` shows when nothing is selected.
+ */
+function EditableSelectCell({
+    value,
+    column,
+    pending,
+    onCommit,
+}: {
+    value: string | number | null;
+    column: TableColumn;
+    pending: boolean;
+    onCommit: (next: string) => void;
+}) {
+    const options = column.options ?? [];
+
+    return (
+        <select
+            value={value === null || value === undefined ? '' : String(value)}
+            disabled={pending}
+            onChange={(event) => onCommit(event.target.value)}
+            className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-7 w-fit max-w-[12rem] rounded-md border bg-transparent px-2 py-1 text-sm shadow-xs outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+            {column.placeholder ? <option value="">{column.placeholder}</option> : null}
+            {options.map((option) => (
+                <option key={option.value} value={option.value} disabled={option.isDisabled}>
+                    {option.label}
+                </option>
+            ))}
+        </select>
+    );
+}
+
+/**
+ * Inline-editable text cell (slice: editable columns). Renders a compact
+ * `<input>` that commits on Enter or blur; Escape reverts to the server value.
+ */
+function EditableTextCell({
+    value,
+    column,
+    pending,
+    onCommit,
+}: {
+    value: string | number | null;
+    column: TableColumn;
+    pending: boolean;
+    onCommit: (next: string) => void;
+}) {
+    const [draft, setDraft] = useState<string>(value === null || value === undefined ? '' : String(value));
+
+    useEffect(() => {
+        setDraft(value === null || value === undefined ? '' : String(value));
+    }, [value]);
+
+    const commit = () => {
+        if (draft !== String(value)) {
+            onCommit(draft);
+        }
+    };
+
+    return (
+        <input
+            type={column.type ?? 'text'}
+            inputMode={column.inputMode}
+            step={column.step}
+            maxLength={column.maxLength}
+            placeholder={column.placeholder}
+            value={draft}
+            disabled={pending}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commit}
+            onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                    commit();
+                    (event.target as HTMLInputElement).blur();
+                } else if (event.key === 'Escape') {
+                    setDraft(String(value));
+                    (event.target as HTMLInputElement).blur();
+                }
+            }}
+            className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-7 w-full min-w-[6rem] max-w-[14rem] rounded-md border bg-transparent px-2 py-1 text-sm shadow-xs outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50"
+        />
+    );
+}
+
 export default function TableRenderer({ initial, source }: TableRendererProps) {
     // The view state mirrors the URL query string (same param names as the
     // index endpoint) so the back button and shareable links restore the
@@ -389,6 +719,11 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
     }, [initial, source]);
 
     const [rows, setRows] = useState<TableRow[]>(initial.rows);
+    // The live table definition. A page-owned table hydrates it from the
+    // initial payload; an embedded relation table passes an empty shell
+    // (zero columns/actions), so the first fetch populates the definition
+    // too — otherwise rows would render with no columns to display.
+    const [definition, setDefinition] = useState<TablePayload>(initial);
     const [summary, setSummary] = useState<TableSummaryMap | undefined>(initial.summary);
     const [groupSummary, setGroupSummary] = useState<Record<string, TableSummaryMap> | undefined>(initial.groupSummary);
     const [page, setPage] = useState(initialUrlState.page);
@@ -408,6 +743,9 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
     // skips a redundant first fetch; an embedded relation table has no rows to
     // hydrate, so it starts already "dirty" (refreshKey 1) and fetches on mount.
     const [refreshKey, setRefreshKey] = useState(() => (source ? 1 : 0));
+    // Slice: editable columns. Keys are `${rowId}:${columnName}` for the cells
+    // currently awaiting their update round-trip (disables the control).
+    const [editingPending, setEditingPending] = useState<Set<string>>(() => new Set());
     const [confirm, setConfirm] = useState<ConfirmState | null>(null);
     const [edit, setEdit] = useState<ConfirmState | null>(null);
     const [runningAction, setRunningAction] = useState<string | null>(null);
@@ -436,6 +774,15 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
     );
     const [isColumnsOpen, setIsColumnsOpen] = useState(false);
 
+    // Filter-layout state (mirrors Filament's FiltersLayout). 'dropdown' hosts
+    // the panel in a Base UI Popover (its dismissable layer nests the filter
+    // controls' own popups — a Select menu opened inside stays open on option
+    // clicks instead of dismissing the panel); 'modal' a dialog. Collapsible
+    // above/side layouts toggle the panel through the toolbar trigger.
+    const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+    const [isFilterModalOpen, setFilterModalOpen] = useState(false);
+    const [filtersExpanded, setFiltersExpanded] = useState(false);
+
     const lastLoaded = useRef({
         page: initial.page,
         perPage: initial.perPage,
@@ -448,18 +795,25 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
     });
     const aborters = useRef<Record<string, AbortController>>({});
 
+    // Flat action definitions (excludes groups — those are matched by name in
+    // the row's action list and rendered as overflow menus).
     const actionsById = useMemo(() => {
         const map = new Map<string, TableAction>();
 
-        for (const action of initial.actions ?? []) {
-            map.set(action.name, action);
+        for (const action of definition.actions ?? []) {
+            if (!action.group) {
+                map.set(action.name, action);
+            }
         }
 
         return map;
-    }, [initial.actions]);
+    }, [definition.actions]);
+
+    // Group definitions, for the overflow menus.
+    const groups = useMemo(() => (definition.actions ?? []).filter((action) => action.group), [definition.actions]);
 
     const runAction = async (row: TableRow, action: TableAction): Promise<void> => {
-        const tableId = initial.id;
+        const tableId = definition.id;
 
         if (!tableId) {
             return;
@@ -504,7 +858,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
     };
 
     const runBulkAction = async (action: TableBulkAction): Promise<void> => {
-        const tableId = initial.id;
+        const tableId = definition.id;
 
         if (!tableId || selectedRecords.size === 0) {
             return;
@@ -545,9 +899,71 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
         }
     };
 
+    // Slice: editable columns — write one column of one record through the
+    // typed record-column endpoint. The cell updates optimistically; on
+    // success the server's fresh cell value reconciles the row, on failure a
+    // refetch restores the true state.
+    const commitEditable = async (
+        rowId: string | number,
+        column: TableColumn,
+        nextValue: unknown,
+    ): Promise<void> => {
+        const tableId = definition.id;
+
+        if (!tableId) {
+            return;
+        }
+
+        const key = `${rowId}:${column.name}`;
+
+        setRows((prev) =>
+            prev.map((row) => (row.id === rowId ? { ...row, [column.name]: { value: nextValue } } : row)),
+        );
+        setEditingPending((prev) => {
+            const next = new Set(prev);
+            next.add(key);
+            return next;
+        });
+
+        try {
+            const response = await fetch(panelUrl(`/table/${tableId}/record/${rowId}/column/${column.name}`), {
+                method: 'POST',
+                headers: postHeaders(),
+                body: JSON.stringify({ value: nextValue }),
+            });
+
+            const payload = (await response.json()) as {
+                data?: { value?: boolean };
+                error?: string;
+                errors?: Record<string, string[]>;
+            };
+
+            if (!response.ok) {
+                throw new Error(
+                    payload.errors?.[column.name]?.[0] ?? payload.error ?? `Update returned ${response.status}`,
+                );
+            }
+
+            if (payload.data) {
+                setRows((prev) =>
+                    prev.map((row) => (row.id === rowId ? { ...row, [column.name]: payload.data } : row)),
+                );
+            }
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Update failed.');
+            setRefreshKey((key) => key + 1);
+        } finally {
+            setEditingPending((prev) => {
+                const next = new Set(prev);
+                next.delete(key);
+                return next;
+            });
+        }
+    };
+
     const columns = useMemo<ColumnDef<TableRow>[]>(
         () => [
-            ...(initial.selectable
+            ...(definition.selectable
                 ? [
                       {
                           id: 'select',
@@ -613,15 +1029,72 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
                       },
                   ]
                 : []),
-            ...initial.columns.map((column) => ({
-                accessorKey: column.name,
+            ...definition.columns.map((column) => ({
+                id: column.name,
+                // The server serializes relationship columns under the literal
+                // dot key (e.g. "category.name"), so resolve the value by that
+                // exact key rather than TanStack's nested dot-lookup.
+                accessorFn: (row: TableRow) => row[column.name],
                 header: column.label,
                 enableSorting: column.sortable ?? false,
+                size: column.width ? parseInt(column.width, 10) : undefined,
                 cell: (info: CellContext<TableRow, unknown>) => {
-                    return <Cell value={info.getValue()} placeholder={column.placeholder} />;
+                    if (column.editable && column.kind === 'text') {
+                        const row = info.row.original;
+
+                        return (
+                            <EditableTextCell
+                                value={info.getValue() as string | number | null}
+                                column={column}
+                                pending={editingPending.has(`${row.id}:${column.name}`)}
+                                onCommit={(next) => {
+                                    void commitEditable(row.id, column, next);
+                                }}
+                            />
+                        );
+                    }
+
+                    if (column.editable && column.kind === 'select') {
+                        const row = info.row.original;
+
+                        return (
+                            <EditableSelectCell
+                                value={info.getValue() as string | number | null}
+                                column={column}
+                                pending={editingPending.has(`${row.id}:${column.name}`)}
+                                onCommit={(next) => {
+                                    void commitEditable(row.id, column, next);
+                                }}
+                            />
+                        );
+                    }
+
+                    if (column.editable && (column.kind === 'checkbox' || column.kind === 'toggle')) {
+                        const row = info.row.original;
+                        const raw = info.getValue() as { value?: boolean } | null;
+
+                        return (
+                            <EditableBooleanCell
+                                value={raw?.value === true}
+                                column={column}
+                                pending={editingPending.has(`${row.id}:${column.name}`)}
+                                onCommit={(next) => {
+                                    void commitEditable(row.id, column, next);
+                                }}
+                            />
+                        );
+                    }
+
+                    return (
+                        <Cell
+                            value={info.getValue()}
+                            placeholder={column.placeholder}
+                            presentation={column}
+                        />
+                    );
                 },
             })),
-            ...((initial.actions?.length ?? 0) > 0
+            ...((definition.actions?.length ?? 0) > 0
                 ? [
                       {
                           id: 'actions',
@@ -629,78 +1102,93 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
                           enableSorting: false,
                           cell: (info: CellContext<TableRow, unknown>) => {
                               const row = info.row.original;
-                              const visible = (row.actions ?? [])
-                                  .map((name) => actionsById.get(name))
-                                  .filter((action): action is TableAction => action !== undefined);
+                              const entries = row.actions ?? [];
 
-                              if (visible.length === 0) {
+                              if (entries.length === 0) {
                                   return null;
                               }
 
                               return (
-                                  <div className="flex items-center justify-end gap-1">
-                                      {visible.map((action) => {
-                                          const isRunning = runningAction === `${row.id}:${action.name}`;
+                                  <RowActions
+                                      row={row}
+                                      entries={entries}
+                                      actions={actionsById}
+                                      groups={groups}
+                                      runningKey={runningAction}
+                                      onInvoke={(targetRow, action) => {
+                                          // A navigation action (record
+                                          // navigation slice) goes to its
+                                          // per-record URL — never through the
+                                          // action endpoint.
+                                          if (navigateActionUrl(targetRow, action)) {
+                                              return;
+                                          }
 
-                                          return (
-                                              <Button
-                                                  key={action.name}
-                                                  type="button"
-                                                  variant="ghost"
-                                                  size="sm"
-                                                  disabled={isRunning}
-                                                  onClick={() => {
-                                                      if (action.type === 'edit') {
-                                                          // Modal edit (slice 1.2): the shared ActionModal
-                                                          // fetches the record's values + the form document,
-                                                          // and submits through this action's endpoint.
-                                                          setEdit({ row, action });
-                                                      } else if (action.requiresConfirmation) {
-                                                          setConfirm({ row, action });
-                                                      } else {
-                                                          runAction(row, action);
-                                                      }
-                                                  }}
-                                                  className={ACTION_COLORS[action.color ?? 'primary']}
-                                              >
-                                                  {isRunning ? 'Working…' : action.label}
-                                              </Button>
-                                          );
-                                      })}
-                                  </div>
+                                          if (action.type === 'edit') {
+                                              // Modal edit (slice 1.2): the shared ActionModal
+                                              // fetches the record's values + the form document,
+                                              // and submits through this action's endpoint.
+                                              setEdit({ row: targetRow, action });
+                                          } else if (action.requiresConfirmation) {
+                                              setConfirm({ row: targetRow, action });
+                                          } else {
+                                              runAction(targetRow, action);
+                                          }
+                                      }}
+                                  />
                               );
                           },
                       },
                   ]
                 : []),
         ],
-        [initial.columns, initial.actions, initial.selectable, actionsById, runningAction, rows, selectedRecords],
+        [definition.columns, definition.actions, definition.selectable, actionsById, groups, runningAction, rows, selectedRecords, editingPending, commitEditable],
     );
 
     const activeSort = sorting[0];
 
-    const hasSearchableColumns = initial.columns.some((column) => column.searchable ?? false);
-    const hasFilters = (initial.filters?.length ?? 0) > 0;
-    const hasToggleableColumns = initial.columns.some((column) => column.toggleable ?? false);
-    const hasHeaderActions = (initial.headerActions?.length ?? 0) > 0;
-    const hasGroups = (initial.groups ?? []).length > 0;
+    const hasSearchableColumns = definition.columns.some((column) => column.searchable ?? false);
+    const hasFilters = (definition.filters?.length ?? 0) > 0;
+    const hasToggleableColumns = definition.columns.some((column) => column.toggleable ?? false);
+    const hasHeaderActions = (definition.headerActions?.length ?? 0) > 0;
+    const hasGroups = (definition.groups ?? []).length > 0;
+
+    // Where the filters render (mirrors Filament's FiltersLayout enum).
+    const filtersLayout = definition.filtersLayout ?? 'dropdown';
+    const isDialogLayout = filtersLayout === 'dropdown' || filtersLayout === 'modal';
+    const isAboveLayout = filtersLayout === 'above-content' || filtersLayout === 'above-content-collapsible';
+    const isBelowLayout = filtersLayout === 'below-content';
+    const isBeforeLayout = filtersLayout === 'before-content' || filtersLayout === 'before-content-collapsible';
+    const isAfterLayout = filtersLayout === 'after-content' || filtersLayout === 'after-content-collapsible';
+    const isCollapsible =
+        filtersLayout === 'above-content-collapsible' ||
+        filtersLayout === 'before-content-collapsible' ||
+        filtersLayout === 'after-content-collapsible';
+    const isHiddenLayout = filtersLayout === 'hidden';
+    // The toolbar trigger: dialog layouts always show it, collapsible above/side
+    // layouts use it to expand/collapse the panel; inline (above/below) and
+    // always-visible side layouts render no trigger.
+    const showFilterTrigger =
+        hasFilters &&
+        !isHiddenLayout &&
+        (isDialogLayout || filtersLayout === 'above-content-collapsible' || isBeforeLayout || isAfterLayout);
 
     const groupDefinition = useMemo<TableGroup | undefined>(
-        () => initial.groups?.find((candidate) => candidate.column === group),
-        [initial.groups, group],
+        () => definition.groups?.find((candidate) => candidate.column === group),
+        [definition.groups, group],
     );
 
     const textFilterNames = useMemo(() => {
         const names = new Set<string>();
 
-        for (const filter of initial.filters ?? []) {
+        for (const filter of definition.filters ?? []) {
             if (filter.type === 'text') {
                 names.add(filter.name);
             }
         }
 
         return names;
-    }, [initial.filters]);
+    }, [definition.filters]);
 
     // The last *settled* search term and text-filter values. The debounce
     // effects only reset the page when these actually change, so hydrating
@@ -711,16 +1199,16 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
     // Persist the visibility map per table. Only toggleable columns live in
     // the map, so non-toggleable columns can never be stored as hidden.
     useEffect(() => {
-        if (!initial.id) {
+        if (!definition.id) {
             return;
         }
 
         try {
-            localStorage.setItem(`${STORAGE_PREFIX}${initial.id}`, JSON.stringify(columnVisibility));
+            localStorage.setItem(`${STORAGE_PREFIX}${definition.id}`, JSON.stringify(columnVisibility));
         } catch {
             // Storage unavailable — visibility just won't persist.
         }
-    }, [initial.id, columnVisibility]);
+    }, [definition.id, columnVisibility]);
 
     const toggleColumn = (name: string, visible: boolean): void => {
         setColumnVisibility((current) => ({ ...current, [name]: visible }));
@@ -730,7 +1218,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
         setColumnVisibility(() => {
             const next: VisibilityState = {};
 
-            for (const column of initial.columns) {
+            for (const column of definition.columns) {
                 if (column.toggleable) {
                     next[column.name] = true;
                 }
@@ -793,7 +1281,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
     }, [textInputs, textFilterNames]);
 
     useEffect(() => {
-        const tableId = initial.id;
+        const tableId = definition.id;
 
         if (!tableId) {
             return;
@@ -854,6 +1342,11 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
                 setGroupSummary(payload.groupSummary);
                 setGroup(payload.activeGroup ?? '');
 
+                // Adopt the fetched definition (columns, actions, filters,
+                // header/toolbar actions, grouping) — an embedded relation
+                // table's shell starts empty, so the first fetch populates it.
+                setDefinition(payload);
+
                 // The server may have clamped the page (e.g. beyond the last
                 // one) — adopt its answer so pagination stays consistent.
                 setPage(payload.page);
@@ -867,7 +1360,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
                     setIsLoading(false);
                 }
             });
-    }, [page, perPage, activeSort, searchTerm, columnFilters, refreshKey, group, initial.id, source]);
+    }, [page, perPage, activeSort, searchTerm, columnFilters, refreshKey, group, definition.id, source]);
 
     // Mirror the view state back into the URL — the same param names as the
     // index endpoint — so the back button and shareable links restore it.
@@ -887,7 +1380,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
             params.delete('page');
         }
 
-        if (perPage === initial.recordsPerPage) {
+        if (perPage === definition.recordsPerPage) {
             params.delete('perPage');
         }
 
@@ -911,7 +1404,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
         const hasPage = currentState !== null && typeof currentState === 'object' && 'page' in currentState;
 
         window.history.pushState(hasPage ? { ...currentState, url: target } : null, '', target);
-    }, [page, perPage, sorting, searchTerm, columnFilters, group, initial.recordsPerPage, source, initial.id]);
+    }, [page, perPage, sorting, searchTerm, columnFilters, group, definition.recordsPerPage, source, definition.id]);
 
     // Back/forward restore the exact view: re-derive the state from the URL
     // the browser popped to and apply it. The write-back effect then sees a
@@ -923,7 +1416,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
         }
 
         const onPopState = (): void => {
-            const next = readUrlState(window.location.href, initial);
+            const next = readUrlState(window.location.href, definition);
 
             setPage(next.page);
             setPerPage(next.perPage);
@@ -932,7 +1425,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
             setTextInputs(next.textInputs);
             setSearchInput(next.search);
             setSearchTerm(next.search);
-            setGroup(next.group || (initial.activeGroup ?? ''));
+            setGroup(next.group || (definition.activeGroup ?? ''));
             committedSearch.current = next.search;
             committedTextFilters.current = textFilterSignature(next.columnFilters, textFilterNames);
         };
@@ -940,7 +1433,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
         window.addEventListener('popstate', onPopState);
 
         return () => window.removeEventListener('popstate', onPopState);
-    }, [initial, textFilterNames]);
+    }, [definition, textFilterNames]);
 
     const table = useReactTable({
         data: rows,
@@ -1003,12 +1496,6 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
         return value === null || value === undefined ? '' : String(value);
     };
 
-    const filterSelected = (filter: TableFilter, optionValue: string): boolean => {
-        const value = filterValue(filter);
-
-        return Array.isArray(value) ? value.includes(optionValue) : value === optionValue;
-    };
-
     const setFilterValue = (filter: TableFilter, value: string | string[]): void => {
         setColumnFilters([
             ...columnFilters.filter((columnFilter) => columnFilter.id !== filter.name),
@@ -1030,7 +1517,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
 
         const definitions = new Map<string, TableFilter>();
 
-        for (const filter of initial.filters ?? []) {
+        for (const filter of definition.filters ?? []) {
             definitions.set(filter.name, filter);
         }
 
@@ -1077,7 +1564,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
         }
 
         return list;
-    }, [searchTerm, columnFilters, initial.filters]);
+    }, [searchTerm, columnFilters, definition.filters]);
 
     const dismissActiveFilter = (active: ActiveFilter): void => {
         if (active.kind === 'search') {
@@ -1118,22 +1605,64 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
         setPage(1);
     };
 
+    // The filter form's state accessors — shared by every layout the
+    // FilterPanel renders in (dropdown / modal / above / below / side).
+    const filterAccessors: FilterAccessors = {
+        filterValue,
+        setFilterValue,
+        textInputs,
+        setTextInput: (name, value) => setTextInputs((current) => ({ ...current, [name]: value })),
+    };
+
+    // The filter form — shared by every layout the FilterPanel renders in
+    // (dropdown / modal / above / below / side). Above/below lay the fields out
+    // in a responsive grid; the rest use a single column.
+    const renderFilterPanel = (grid?: boolean) => (
+        <FilterPanel
+            filters={definition.filters ?? []}
+            accessors={filterAccessors}
+            activeCount={activeFilters.length}
+            onReset={resetFilters}
+            grid={grid}
+        />
+    );
+
     const nativeSelectClasses =
         'h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground shadow-xs outline-none transition focus-visible:ring-2 focus-visible:ring-ring/50';
 
     return (
-        <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-            {initial.heading || hasHeaderActions ? (
+        <div
+            className={cn(
+                hasFilters && !isHiddenLayout && (isBeforeLayout || isAfterLayout)
+                    ? 'flex flex-col gap-4 lg:flex-row lg:items-start'
+                    : undefined,
+            )}
+        >
+            {isBeforeLayout && hasFilters && !isHiddenLayout ? (
+                <aside
+                    className={cn(
+                        'w-full shrink-0 lg:w-72',
+                        isCollapsible && !filtersExpanded && 'hidden',
+                    )}
+                >
+                    <div className="rounded-2xl border bg-card p-5 shadow-sm">
+                        {renderFilterPanel()}
+                    </div>
+                </aside>
+            ) : null}
+
+            <div className="min-w-0 flex-1 overflow-hidden rounded-2xl border bg-card shadow-sm">
+                {definition.heading || hasHeaderActions ? (
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
-                    {initial.heading ? (
+                    {definition.heading ? (
                         <h2 className="text-base font-semibold tracking-tight text-foreground">
-                            {initial.heading}
+                            {definition.heading}
                         </h2>
                     ) : null}
 
                     {hasHeaderActions ? (
                         <HeaderActions
-                            actions={initial.headerActions ?? []}
+                            actions={definition.headerActions ?? []}
                             onSucceeded={() => setRefreshKey((key) => key + 1)}
                             submitUrlFor={source ? (name) => source.action(undefined, name) : undefined}
                         />
@@ -1141,8 +1670,14 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
                 </div>
             ) : null}
 
-            {hasSearchableColumns || hasFilters || hasToggleableColumns ? (
-                <div className="flex flex-wrap items-center gap-3 border-b border-border bg-muted/30 px-5 py-3">
+            {isAboveLayout && hasFilters && !isHiddenLayout ? (
+                <div className={cn('border-b border-border bg-muted/30 px-5 py-4', isCollapsible && !filtersExpanded && 'hidden')}>
+                    {renderFilterPanel(true)}
+                </div>
+            ) : null}
+
+            {hasSearchableColumns || hasGroups || hasToggleableColumns || showFilterTrigger ? (
+                <div className="flex flex-wrap items-center gap-3 border-b border-border bg-muted/30 px-3 py-1.5">
                     <div className="relative flex min-w-0 flex-1 items-center sm:max-w-xs">
                         <Search className="pointer-events-none absolute left-3 size-4 text-muted-foreground" aria-hidden="true" />
                         <Input
@@ -1184,7 +1719,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
                                     className={nativeSelectClasses}
                                 >
                                     <option value="">None</option>
-                                    {(initial.groups ?? []).map((candidate) => (
+                                    {(definition.groups ?? []).map((candidate) => (
                                         <option key={candidate.column} value={candidate.column}>
                                             {candidate.label}
                                         </option>
@@ -1204,22 +1739,24 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
                                     }
                                 />
                                 <DropdownMenuContent align="end" className="w-56">
-                                    <div className="flex items-center justify-between px-2 py-1.5">
-                                        <DropdownMenuLabel className="px-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                            Visible columns
-                                        </DropdownMenuLabel>
-                                        <Button
-                                            type="button"
-                                            variant="link"
-                                            size="sm"
-                                            className="h-auto px-2 text-xs font-medium"
-                                            onClick={resetColumns}
-                                        >
-                                            Reset
-                                        </Button>
-                                    </div>
+                                    <DropdownMenuGroup>
+                                        <div className="flex items-center justify-between px-2 py-1.5">
+                                            <DropdownMenuLabel className="px-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                Visible columns
+                                            </DropdownMenuLabel>
+                                            <Button
+                                                type="button"
+                                                variant="link"
+                                                size="sm"
+                                                className="h-auto px-2 text-xs font-medium"
+                                                onClick={resetColumns}
+                                            >
+                                                Reset
+                                            </Button>
+                                        </div>
+                                    </DropdownMenuGroup>
                                     <DropdownMenuSeparator />
-                                    {initial.columns
+                                    {definition.columns
                                         .filter((column) => column.toggleable)
                                         .map((column) => (
                                             <DropdownMenuCheckboxItem
@@ -1234,83 +1771,65 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
                             </DropdownMenu>
                         ) : null}
 
-                        {initial.filters?.map((filter) =>
-                            filter.type === 'text' ? (
-                                <label key={filter.name} className="flex items-center gap-2 text-xs text-muted-foreground">
-                                    <span className="font-medium">{filter.label}</span>
-                                    <Input
-                                        id={`table-filter-${filter.name}`}
-                                        type="search"
-                                        value={textInputs[filter.name] ?? ''}
-                                        onChange={(event) =>
-                                            setTextInputs((current) => ({ ...current, [filter.name]: event.target.value }))
+                        {showFilterTrigger ? (
+                            filtersLayout === 'modal' ? (
+                                <Dialog open={isFilterModalOpen} onOpenChange={setFilterModalOpen}>
+                                    <DialogTrigger
+                                        render={
+                                            <Button variant="outline" size="sm" className="gap-1.5">
+                                                <ListFilter className="size-4" aria-hidden="true" />
+                                                Filters
+                                                {activeFilters.length > 0 ? (
+                                                    <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                                                        {activeFilters.length}
+                                                    </span>
+                                                ) : null}
+                                            </Button>
                                         }
-                                        placeholder={filter.placeholder ?? `Filter by ${filter.label.toLowerCase()}…`}
-                                        className="h-8 w-40 px-2 text-xs"
                                     />
-                                </label>
-                            ) : filter.type === 'select' && filter.multiple ? (
-                                <fieldset key={filter.name} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                                    <legend className="font-medium">{filter.label}</legend>
-                                    {filter.options.map((option) => (
-                                        <label key={option.value} className="flex cursor-pointer items-center gap-1.5">
-                                            <Checkbox
-                                                checked={filterSelected(filter, option.value)}
-                                                onCheckedChange={(checked) => {
-                                                    const current = filterValue(filter);
-                                                    const currentValues = Array.isArray(current)
-                                                        ? current
-                                                        : current
-                                                          ? [current]
-                                                          : [];
-
-                                                    const next = checked
-                                                        ? [...currentValues, option.value]
-                                                        : currentValues.filter((value) => value !== option.value);
-
-                                                    setFilterValue(filter, next);
-                                                }}
-                                            />
-                                            {option.label}
-                                        </label>
-                                    ))}
-                                </fieldset>
+                                    <DialogContent className="sm:max-w-lg">
+                                        <DialogHeader>
+                                            <DialogTitle>Filters</DialogTitle>
+                                        </DialogHeader>
+                                        {renderFilterPanel()}
+                                    </DialogContent>
+                                </Dialog>
+                            ) : filtersLayout === 'dropdown' ? (
+                                <Popover open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
+                                    <PopoverTrigger
+                                        render={
+                                            <Button variant="outline" size="sm" className="gap-1.5">
+                                                <ListFilter className="size-4" aria-hidden="true" />
+                                                Filters
+                                                {activeFilters.length > 0 ? (
+                                                    <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                                                        {activeFilters.length}
+                                                    </span>
+                                                ) : null}
+                                            </Button>
+                                        }
+                                    />
+                                    <PopoverContent align="end" sideOffset={8} className="w-80">
+                                        {renderFilterPanel()}
+                                    </PopoverContent>
+                                </Popover>
                             ) : (
-                                <label key={filter.name} className="flex items-center gap-2 text-xs text-muted-foreground">
-                                    <span className="font-medium">{filter.label}</span>
-                                    <select
-                                        id={`table-filter-${filter.name}`}
-                                        value={filterValue(filter) as string}
-                                        onChange={(event) => setFilterValue(filter, event.target.value)}
-                                        className={nativeSelectClasses}
-                                    >
-                                        {filter.options.some((option) => option.value === '') ? null : (
-                                            <option value="">All</option>
-                                        )}
-                                        {filter.options.map((option) => (
-                                            <option key={option.value} value={option.value}>
-                                                {option.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
-                            ),
-                        )}
-
-                        {activeFilters.length > 0 ? (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={resetFilters}
-                                className="gap-1.5 text-muted-foreground hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-                            >
-                                <X className="size-3.5" aria-hidden="true" />
-                                Reset filters
-                                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                                    {activeFilters.length}
-                                </span>
-                            </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-1.5"
+                                    onClick={() => setFiltersExpanded((expanded) => !expanded)}
+                                >
+                                    <ListFilter className="size-4" aria-hidden="true" />
+                                    Filters
+                                    {activeFilters.length > 0 ? (
+                                        <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                                            {activeFilters.length}
+                                        </span>
+                                    ) : null}
+                                </Button>
+                            )
                         ) : null}
                     </div>
                 </div>
@@ -1342,8 +1861,8 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
                 </div>
             ) : null}
 
-            {initial.selectable && selectedRecords.size > 0 ? (
-                <div className="flex flex-wrap items-center gap-3 border-b border-border bg-primary/5 px-5 py-2.5">
+            {definition.selectable && selectedRecords.size > 0 ? (
+                <div className="flex flex-wrap items-center gap-3 border-b border-border bg-primary/5 px-3 py-1.5">
                     <span className="text-xs font-medium text-foreground">
                         <span className="text-primary">{selectedRecords.size} selected</span>
                     </span>
@@ -1351,27 +1870,42 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
                     <span className="h-4 w-px bg-border" />
 
                     <div className="flex flex-wrap items-center gap-1">
-                        {(initial.toolbarActions ?? []).map((action) => {
+                        {(definition.toolbarActions ?? []).map((action) => {
                             const isRunning = runningBulkAction === action.name;
+                            const Icon = action.icon ? ICONS[action.icon] : undefined;
+                            const content = isRunning ? (
+                                <span className="size-3.5 animate-pulse rounded-full border-2 border-current border-t-transparent" />
+                            ) : (
+                                <>
+                                    {Icon ? <Icon className="size-3.5" aria-hidden="true" /> : null}
+                                    {action.label}
+                                </>
+                            );
 
                             return (
-                                <Button
-                                    key={action.name}
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    disabled={isRunning}
-                                    onClick={() => {
-                                        if (action.requiresConfirmation) {
-                                            setBulkConfirm({ action });
-                                        } else {
-                                            runBulkAction(action);
+                                <Tooltip key={action.name}>
+                                    <TooltipTrigger
+                                        render={
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                disabled={isRunning}
+                                                onClick={() => {
+                                                    if (action.requiresConfirmation) {
+                                                        setBulkConfirm({ action });
+                                                    } else {
+                                                        runBulkAction(action);
+                                                    }
+                                                }}
+                                                className={cn('gap-1.5', ACTION_COLORS[action.color ?? 'primary'])}
+                                            >
+                                                {content}
+                                            </Button>
                                         }
-                                    }}
-                                    className={ACTION_COLORS[action.color ?? 'primary']}
-                                >
-                                    {isRunning ? 'Working…' : action.label}
-                                </Button>
+                                    />
+                                    <TooltipContent>{action.label}</TooltipContent>
+                                </Tooltip>
                             );
                         })}
                     </div>
@@ -1402,7 +1936,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
                                               ? 'descending'
                                               : undefined
                                     }
-                                    className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                                    className="h-7 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                                 >
                                     {header.isPlaceholder ? null : header.column.getCanSort() ? (
                                         <button
@@ -1508,7 +2042,28 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
                                     ) : null}
 
                                     {!isCollapsed ? (
-<TableRowPrimitive className="hover:bg-muted/40">
+<TableRowPrimitive
+                                            className={cn('hover:bg-muted/40', record.recordUrl && 'cursor-pointer')}
+                                            onClick={
+                                                record.recordUrl
+                                                    ? (event) => {
+                                                          // Row navigation (record navigation slice):
+                                                          // clicking a row opens the record (view page,
+                                                          // else edit). Clicks on interactive elements
+                                                          // inside the row — action buttons, selection
+                                                          // checkboxes (Base UI renders them as
+                                                          // [role="checkbox"]), links — never trigger it.
+                                                          const target = event.target as HTMLElement;
+
+                                                          if (target.closest('button, a, input, select, label, [role="menuitem"], [role="checkbox"]')) {
+                                                              return;
+                                                          }
+
+                                                          router.visit(record.recordUrl as string);
+                                                      }
+                                                    : undefined
+                                            }
+                                        >
                                             {row.getVisibleCells().map((cell) => (
                                                 <TableCell key={cell.id} className="px-5 py-3 text-foreground">
                                                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -1581,7 +2136,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
                 ) : null}
             </Table>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-3 py-1.5">
                 <p className="text-xs text-muted-foreground">
                     Showing <span className="font-medium text-foreground">{firstRow}</span>–
                     <span className="font-medium text-foreground">{lastRow}</span> of{' '}
@@ -1599,7 +2154,7 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
                             onChange={(event) => table.setPageSize(Number(event.target.value))}
                             className={nativeSelectClasses}
                         >
-                            {initial.recordsPerPageSelectOptions.map((option) => (
+                            {definition.recordsPerPageSelectOptions.map((option) => (
                                 <option key={option} value={option}>
                                     {option}
                                 </option>
@@ -1638,6 +2193,12 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
                 </div>
             </div>
 
+            {isBelowLayout && hasFilters && !isHiddenLayout ? (
+                <div className="border-t border-border bg-muted/30 px-5 py-4">
+                    {renderFilterPanel(true)}
+                </div>
+            ) : null}
+
             <AlertDialog
                 open={confirm !== null}
                 onOpenChange={(open) => {
@@ -1648,10 +2209,12 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
             >
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Confirm {confirm?.action.label ?? 'action'}</AlertDialogTitle>
+                        <AlertDialogTitle>
+                            {confirm?.action.modalHeading ?? `Confirm ${confirm?.action.label ?? 'action'}`}
+                        </AlertDialogTitle>
                         <AlertDialogDescription>
-                            This runs the “{confirm?.action.label}” action on this record. This action cannot be
-                            undone.
+                            {confirm?.action.modalDescription ??
+                                `This runs the “${confirm?.action.label}” action on this record. This action cannot be undone.`}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -1684,10 +2247,12 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
             >
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Confirm {bulkConfirm?.action.label ?? 'action'}</AlertDialogTitle>
+                        <AlertDialogTitle>
+                            {bulkConfirm?.action.modalHeading ?? `Confirm ${bulkConfirm?.action.label ?? 'action'}`}
+                        </AlertDialogTitle>
                         <AlertDialogDescription>
-                            This runs the “{bulkConfirm?.action.label}” action on {selectedRecords.size} selected
-                            records. This action cannot be undone.
+                            {bulkConfirm?.action.modalDescription ??
+                                `This runs the “${bulkConfirm?.action.label}” action on ${selectedRecords.size} selected records. This action cannot be undone.`}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -1710,10 +2275,10 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
                 </AlertDialogContent>
             </AlertDialog>
 
-            {edit !== null && initial.id !== undefined ? (
+            {edit !== null && definition.id !== undefined ? (
                 <ActionModal
                     action={edit.action}
-                    tableId={initial.id}
+                    tableId={definition.id}
                     recordId={edit.row.id}
                     open
                     onClose={() => setEdit(null)}
@@ -1721,6 +2286,20 @@ export default function TableRenderer({ initial, source }: TableRendererProps) {
                     submitUrl={source ? source.action(edit.row.id, edit.action.name) : undefined}
                     recordUrl={source ? source.record(edit.row.id) : undefined}
                 />
+            ) : null}
+            </div>
+
+            {isAfterLayout && hasFilters && !isHiddenLayout ? (
+                <aside
+                    className={cn(
+                        'w-full shrink-0 lg:w-72',
+                        isCollapsible && !filtersExpanded && 'hidden',
+                    )}
+                >
+                    <div className="rounded-2xl border bg-card p-5 shadow-sm">
+                        {renderFilterPanel()}
+                    </div>
+                </aside>
             ) : null}
         </div>
     );

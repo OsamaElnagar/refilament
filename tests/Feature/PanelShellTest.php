@@ -8,7 +8,7 @@ it('shares the panel shell navigation on every Inertia page', function () {
         ->assertJsonPath('props.refilament.panel.brandName', 'Refilament')
         ->assertJsonPath('props.refilament.panel.id', 'refilament')
         ->assertJsonPath('props.refilament.panel.sidebarCollapsible', false)
-        ->assertJsonPath('props.refilament.panel.renderHooks.sidebar-footer', 'quick-links')
+        ->assertJsonPath('props.refilament.panel.renderHooks', ['panels::sidebar.footer' => '<div class="flex items-center justify-between gap-2 px-2 py-1 text-xs text-muted-foreground"><span>Refilament v0</span></div>'])
         ->assertJsonPath('props.refilament.panel.notifications.polling', '10s')
         ->assertJsonStructure([
             'props' => [
@@ -92,10 +92,12 @@ it('renders the prebuilt bundle when the consumer assets are published', functio
         $html = $this->get('/refilament')->assertOk()->getContent();
 
         // asset() emits an absolute URL in tests (http://localhost/...) —
-        // match the path, not the host.
+        // match the path, not the host. Both URLs carry the mtime cache-bust
+        // (?v=) the published-assets branch appends so a republished bundle
+        // forces a browser refetch.
         expect($html)
-            ->toContain('/vendor/refilament/refilament.js" defer></script>')
-            ->toContain('/vendor/refilament/refilament.css">')
+            ->toContain('/vendor/refilament/refilament.js?v=')
+            ->toContain('/vendor/refilament/refilament.css?v=')
             ->not->toContain('/build/assets/');
     } finally {
         File::deleteDirectory($publicDir);

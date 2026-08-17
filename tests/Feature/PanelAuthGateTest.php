@@ -46,6 +46,36 @@ it('lets an authenticated user through the gate', function () {
         ->assertJsonPath('component', 'refilament/dashboard');
 });
 
+it('gates the typed endpoints too when the gate is enabled', function () {
+    // The whole panel sits behind authMiddleware() (mirroring Filament): the
+    // typed endpoints are as gated as the shell pages, so an unauthenticated
+    // JSON request to the table endpoint gets 401, not data.
+    app(Refilament::class)->panel()
+        ->authMiddleware([PanelAuthenticate::class])
+        ->loginUrl('/login');
+
+    $this->getJson('/refilament/table/posts')
+        ->assertUnauthorized();
+
+    // A browser-style fetch (no Accept: application/json) is redirected to
+    // the login url like any other unauthenticated shell request.
+    $this->get('/refilament/table/posts', ['X-Inertia' => 'true'])
+        ->assertRedirect('/login');
+});
+
+it('serves the typed endpoints to an authenticated user when the gate is enabled', function () {
+    $user = User::factory()->create();
+
+    app(Refilament::class)->panel()
+        ->authMiddleware([PanelAuthenticate::class])
+        ->loginUrl('/login');
+
+    $this->actingAs($user)
+        ->getJson('/refilament/table/posts')
+        ->assertOk()
+        ->assertJsonStructure(['rows', 'total']);
+});
+
 it('keeps the panel config defaults permissive on the panel contract', function () {
     $panel = $this->get('/refilament/posts', ['X-Inertia' => 'true'])->json('props.refilament.panel');
 

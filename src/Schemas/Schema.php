@@ -11,6 +11,7 @@ use LogicException;
 use Refilament\Refilament\Notifications\Notification;
 use Refilament\Refilament\Schemas\Components\Component;
 use Refilament\Refilament\Schemas\Components\Layout;
+use Refilament\Refilament\Schemas\Components\Repeater;
 use Refilament\Refilament\Support\Concerns\CanBeConfigured;
 
 class Schema
@@ -26,6 +27,16 @@ class Schema
     /** @var array<int, Component> */
     protected array $components = [];
 
+    /**
+     * The data snapshot closures in the schema's components evaluate against
+     * — submitted values at validation time, initial values at serialization.
+     * Pushed down to every component (including repeater row fields) before
+     * rules are collected or the payload is built; never serialized.
+     *
+     * @var array<string, mixed>
+     */
+    protected array $validationData = [];
+
     protected ?string $id = null;
 
     /**
@@ -34,6 +45,18 @@ class Schema
      * from it). Mirrors Filament's `->record()`; never survives serialization.
      */
     protected mixed $record = null;
+
+    /**
+     * The Eloquent model class this form creates records for — the default
+     * submit target when no submitUsing() handler is registered (create
+     * "just works" for resource forms, mirroring Filament's default
+     * CreateRecord save: `$model::create($data)`). Set automatically by
+     * `Refilament::registerResources()` from the resource's `$model`; a
+     * consumer's explicit `submitUsing()` always wins. Never serialized.
+     *
+     * @var class-string|null
+     */
+    protected ?string $model = null;
 
     /**
      * Server-side handler run when the form is submitted through the typed
@@ -54,6 +77,14 @@ class Schema
      * @var Closure(mixed, array<string, mixed>): mixed|null
      */
     protected ?Closure $updateHandler = null;
+
+    /**
+     * The primary key of the record this form edits (the singular-resource
+     * slice) — when set, `unique:` rules ignore it so a record never rejects
+     * its own values. The singular page machinery sets it from the resolved
+     * record; never serialized.
+     */
+    protected ?string $ignoredRecordKey = null;
 
     protected ?string $successMessage = null;
 
@@ -171,8 +202,10 @@ class Schema
      * starting values — shared by Resource::formData() and the typed
      * document endpoint, so a modal form and the full-page create form
      * always present the same values (docs/CONTRACT.md, "Modal actions").
+     * A repeater's default is an array of rows (its getDefault() builds
+     * defaultItems rows from the row fields' defaults).
      *
-     * @return array<string, int|string|bool|float|null>
+     * @return array<string, mixed>
      */
     public function initialData(): array
     {
@@ -187,6 +220,32 @@ class Schema
         }
 
         return $data;
+    }
+
+    /**
+     * The Eloquent model class this form creates records for (slice 2.6 —
+     * the auto create default). Mirrors Filament's CreateRecord save:
+     * when no submitUsing() handler is registered, submit() defaults to
+     * `$model::create($data)` so a resource's create form "just works".
+     * Resource forms get this wired automatically by
+     * `Refilament::registerResources()`; a consumer's own `submitUsing()`
+     * always wins over it.
+     *
+     * @param  class-string  $model
+     */
+    public function model(string $model): static
+    {
+        $this->model = $model;
+
+        return $this;
+    }
+
+    /**
+     * @return class-string|null
+     */
+    public function getModel(): ?string
+    {
+        return $this->model;
     }
 
     /**
@@ -213,6 +272,30 @@ class Schema
     public function getSuccessMessage(): ?string
     {
         return $this->successMessage;
+    }
+
+    /**
+     * The current submit handler, if any — lets the singular page machinery
+     * detect whether a consumer declared their own submitUsing() before
+     * auto-wiring the create-or-update default.
+     */
+    public function getSubmitHandler(): ?Closure
+    {
+        return $this->submitHandler;
+    }
+
+    /**
+     * The primary key of the record this form edits (the singular-resource
+     * slice) — `unique:` rules in getValidationRules() ignore this record,
+     * so a record never rejects its own values on save (the same rewrite the
+     * record-update endpoint applies). Mirror of the update endpoint's
+     * ignoreCurrentRecordInUniqueRules(), wired into rule computation.
+     */
+    public function ignoreCurrentRecord(?string $recordKey): static
+    {
+        $this->ignoredRecordKey = $recordKey;
+
+        return $this;
     }
 
     /**
@@ -293,14 +376,25 @@ class Schema
     }
 
     /**
-     * Run the submit handler against validated data.
+     * Run the submit handler against validated data. With no submitUsing()
+     * handler, a schema bound to a model falls back to `$model::create($data)`
+     * (mass assignment, like Filament's default CreateRecord save) — resource
+     * forms create "just works". A schema with neither a handler nor a model
+     * is misconfigured and throws (a standalone, resource-less schema must
+     * declare its own submitUsing()).
      *
      * @param  array<string, mixed>  $data
      */
     public function submit(array $data): void
     {
         if ($this->submitHandler === null) {
-            throw new LogicException('Schema must have a [submitUsing()] handler set before it can be submitted.');
+            if ($this->model === null) {
+                throw new LogicException('Schema must have a [submitUsing()] handler set before it can be submitted.');
+            }
+
+            $this->model::create($data);
+
+            return;
         }
 
         ($this->submitHandler)($data);
@@ -312,14 +406,14 @@ class Schema
      * otherwise fail an unchanged slug against itself). Shared by the typed
      * record update endpoint and the live field-validation endpoint.
      *
-     * @param  array<string, array<int, string>>  $rules
-     * @return array<string, array<int, string>>
+     * @param  array<string, array<int, string|object|Closure>>  $rules
+     * @return array<string, array<int, string|object|Closure>>
      */
     public function ignoreCurrentRecordInUniqueRules(array $rules, string $recordKey): array
     {
         foreach ($rules as $field => $fieldRules) {
             $rules[$field] = array_map(
-                static fn (string $rule): string => preg_match('/^unique:([^,]+),([^,]+)$/', $rule, $matches) === 1
+                static fn (mixed $rule): mixed => is_string($rule) && preg_match('/^unique:([^,]+),([^,]+)$/', $rule, $matches) === 1
                     ? "unique:{$matches[1]},{$matches[2]},{$recordKey}"
                     : $rule,
                 $fieldRules,
@@ -330,15 +424,70 @@ class Schema
     }
 
     /**
+     * The data snapshot closures in the schema's components evaluate against
+     * — submitted values at validation time, initial values at serialization
+     * (docs/ARCHITECTURE.md, "Reactivity": each request evaluates closures
+     * against its own snapshot; nothing persists between requests).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function setValidationData(array $data): static
+    {
+        $this->validationData = $data;
+
+        foreach ($this->getValidationDataTargets() as $component) {
+            $component->setValidationData($data);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Every component whose closures read form data — the component tree
+     * plus each repeater's row fields (which validate under
+     * `{name}.*.{field}` and read their siblings via `Get` dot paths).
+     *
+     * @return array<int, Component>
+     */
+    protected function getValidationDataTargets(): array
+    {
+        $components = $this->getComponentsRecursively();
+
+        foreach ($components as $component) {
+            if ($component instanceof Repeater) {
+                array_push($components, ...$component->getChildComponents());
+            }
+        }
+
+        return $components;
+    }
+
+    /**
+     * Re-push the stored data snapshot to components — for callers that
+     * reach getValidationRules()/toArray() without going through
+     * setValidationData().
+     */
+    protected function pushValidationData(): void
+    {
+        foreach ($this->getValidationDataTargets() as $component) {
+            $component->setValidationData($this->validationData);
+        }
+    }
+
+    /**
      * The Laravel validation rules map for this schema document, keyed by
      * field name (docs/CONTRACT.md, "Validation"). Collected from every
      * field in the tree; hidden fields and `dehydrated(false)` fields (slice
-     * C4 — shown but never submitted) never validate.
+     * C4 — shown but never submitted) never validate. Rules may be strings,
+     * Rule objects or Laravel closure rules — anything the validator
+     * accepts. Conditional rules evaluate against the current data snapshot.
      *
-     * @return array<string, array<int, string>>
+     * @return array<string, array<int, string|object|Closure>>
      */
     public function getValidationRules(?string $operation = null): array
     {
+        $this->pushValidationData();
+
         $rules = [];
 
         foreach ($this->getComponentsRecursively() as $component) {
@@ -353,6 +502,32 @@ class Schema
             if ($componentRules !== []) {
                 $rules[$name] = $componentRules;
             }
+
+            // A repeater's row fields validate under `{name}.*.{field}` —
+            // every row of the array is judged by the row schema's rules
+            // (the repeater's own `array`/min/max rules ride on `{name}`).
+            if ($component instanceof Repeater) {
+                foreach ($component->getChildComponents() as $rowField) {
+                    $rowName = $rowField->getName();
+
+                    if ($rowName === null) {
+                        continue;
+                    }
+
+                    $rowRules = $rowField->getValidationRules();
+
+                    if ($rowRules !== []) {
+                        $rules[$name.'.*.'.$rowName] = $rowRules;
+                    }
+                }
+            }
+        }
+
+        // A singular record's own values must never fail its unique rules
+        // (a settings record saving its unchanged slug would otherwise be
+        // rejected by Laravel's unique rule).
+        if ($this->ignoredRecordKey !== null) {
+            $rules = $this->ignoreCurrentRecordInUniqueRules($rules, $this->ignoredRecordKey);
         }
 
         return $rules;
@@ -375,6 +550,16 @@ class Schema
             if ($name !== null && $component->isVisible()) {
                 $attributes[$name] = $component->getLabel();
             }
+
+            if ($component instanceof Repeater && $name !== null) {
+                foreach ($component->getChildComponents() as $rowField) {
+                    $rowName = $rowField->getName();
+
+                    if ($rowName !== null) {
+                        $attributes[$name.'.*.'.$rowName] = $rowField->getLabel();
+                    }
+                }
+            }
         }
 
         return $attributes;
@@ -387,6 +572,11 @@ class Schema
      */
     public function toArray(?string $operation = null): array
     {
+        // Closures (e.g. a conditional `required(fn (Get $get) => ...)`)
+        // serialize their required flag against the data snapshot — the
+        // caller's prefill data when set, else the fields' defaults.
+        $this->setValidationData($this->validationData !== [] ? $this->validationData : $this->initialData());
+
         $payload = [
             'contract' => self::CONTRACT_VERSION,
             'schema' => array_map(

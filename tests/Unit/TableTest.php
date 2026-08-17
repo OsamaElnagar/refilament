@@ -3,9 +3,10 @@
 declare(strict_types=1);
 
 use Illuminate\Database\Eloquent\Collection;
-use Refilament\Refilament\Tables\Action;
-use Refilament\Refilament\Tables\BulkAction;
+use Refilament\Refilament\Actions\Action;
+use Refilament\Refilament\Actions\BulkAction;
 use Refilament\Refilament\Tables\Column;
+use Refilament\Refilament\Tables\Enums\FiltersLayout;
 use Refilament\Refilament\Tables\SelectFilter;
 use Refilament\Refilament\Tables\Table;
 use Refilament\Refilament\Tables\TextFilter;
@@ -226,6 +227,40 @@ it('omits filters from the definition when none are set', function () {
     expect(Table::make()->columns([Column::make('title')])->toArray())->not->toHaveKey('filters');
 });
 
+it('defaults the filter layout to dropdown when filters are set', function () {
+    $definition = Table::make()
+        ->columns([Column::make('title')])
+        ->filters([TextFilter::make('title')])
+        ->toArray();
+
+    expect($definition['filtersLayout'])->toBe('dropdown');
+});
+
+it('serializes the filter layout passed to filters()', function () {
+    $definition = Table::make()
+        ->columns([Column::make('title')])
+        ->filters([TextFilter::make('title')], layout: FiltersLayout::Modal)
+        ->toArray();
+
+    expect($definition['filtersLayout'])->toBe('modal');
+});
+
+it('serializes a filter layout set via filtersLayout()', function () {
+    $definition = Table::make()
+        ->columns([Column::make('title')])
+        ->filters([TextFilter::make('title')])
+        ->filtersLayout(FiltersLayout::AboveContent)
+        ->toArray();
+
+    expect($definition['filtersLayout'])->toBe('above-content');
+});
+
+it('accepts a string filter layout value', function () {
+    $table = Table::make()->filters([TextFilter::make('title')], layout: 'below-content');
+
+    expect($table->getFiltersLayout())->toBe(FiltersLayout::BelowContent);
+});
+
 it('serializes a trashed filter with its ternary options', function () {
     expect(TrashedFilter::make('trashed')->label('Trashed')->toArray())->toBe([
         'name' => 'trashed',
@@ -259,6 +294,38 @@ it('serializes filters in the table definition', function () {
             'options' => [['value' => 'draft', 'label' => 'Draft']],
         ],
     ]);
+});
+
+it('serializes a relationship filter with options resolved from the relation', function () {
+    $user = User::factory()->create(['name' => 'Ada Lovelace']);
+
+    $filter = SelectFilter::make('user')
+        ->label('User')
+        ->relationship('user', 'name')
+        ->setModel(new Post);
+
+    expect($filter->toArray())->toBe([
+        'name' => 'user',
+        'label' => 'User',
+        'type' => 'select',
+        'options' => [
+            ['value' => (string) $user->id, 'label' => 'Ada Lovelace'],
+        ],
+    ]);
+});
+
+it('injects the table model into a relationship filter before serialization', function () {
+    $user = User::factory()->create(['name' => 'Grace Hopper']);
+
+    $definition = Table::make()
+        ->columns([Column::make('title')])
+        ->filters([SelectFilter::make('user')->relationship('user', 'name')->multiple()])
+        ->query(Post::query())
+        ->toArray();
+
+    expect($definition['filters'][0]['options'])->toContain(
+        ['value' => (string) $user->id, 'label' => 'Grace Hopper'],
+    );
 });
 
 it('serializes an action definition without its closure', function () {

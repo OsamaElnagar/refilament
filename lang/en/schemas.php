@@ -10,54 +10,41 @@
  * "refilament::" in this package.
  */
 
-return array (
-  'callout' => 
-  array (
-    'statuses' => 
-    array (
-      'danger' => 'Error:',
-      'info' => 'Note:',
-      'success' => 'Success:',
-      'warning' => 'Warning:',
-    ),
-  ),
-  'section' => 
-  array (
-    'actions' => 
-    array (
-      'collapse' => 
-      array (
-        'label' => 'Collapse section',
-      ),
-      'expand' => 
-      array (
-        'label' => 'Expand section',
-      ),
-    ),
-  ),
-  'wizard' => 
-  array (
-    'actions' => 
-    array (
-      'previous_step' => 
-      array (
-        'label' => 'Back',
-      ),
-      'next_step' => 
-      array (
-        'label' => 'Next',
-      ),
-    ),
-    'header' => 
-    array (
-      'step' => 
-      array (
-        'statuses' => 
-        array (
-          'completed' => 'Completed',
-          'upcoming' => 'Not completed',
-        ),
-      ),
-    ),
-  ),
-);
+return [
+    'callout' => [
+        'statuses' => [
+            'danger' => 'Error:',
+            'info' => 'Note:',
+            'success' => 'Success:',
+            'warning' => 'Warning:',
+        ],
+    ],
+    'section' => [
+        'actions' => [
+            'collapse' => [
+                'label' => 'Collapse section',
+            ],
+            'expand' => [
+                'label' => 'Expand section',
+            ],
+        ],
+    ],
+    'wizard' => [
+        'actions' => [
+            'previous_step' => [
+                'label' => 'Back',
+            ],
+            'next_step' => [
+                'label' => 'Next',
+            ],
+        ],
+        'header' => [
+            'step' => [
+                'statuses' => [
+                    'completed' => 'Completed',
+                    'upcoming' => 'Not completed',
+                ],
+            ],
+        ],
+    ],
+];

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Refilament\Refilament\Tests\Fixtures;
 
-use Refilament\Refilament\Tables\Action;
-use Refilament\Refilament\Tables\BulkAction;
+use Refilament\Refilament\Actions\Action;
+use Refilament\Refilament\Actions\BulkAction;
 use Refilament\Refilament\Tables\Column;
 use Refilament\Refilament\Tables\Table;
 use Workbench\App\Models\Post;

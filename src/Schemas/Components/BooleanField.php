@@ -18,7 +18,16 @@ abstract class BooleanField extends Component
 
     protected bool $isInline = false;
 
-    protected array $validation = ['boolean'];
+    public function configure(): static
+    {
+        parent::configure();
+
+        // The boolean rule is intrinsic to a checkbox/toggle — added after
+        // the global configureUsing() defaults, before any fluent calls.
+        $this->pushValidationRules(['boolean']);
+
+        return $this;
+    }
 
     /**
      * Require the field to be checked (Laravel's `accepted` rule) — the
@@ -27,8 +36,8 @@ abstract class BooleanField extends Component
      */
     public function accepted(bool $condition = true): static
     {
-        if ($condition && ! in_array('accepted', $this->validation, true)) {
-            $this->validation[] = 'accepted';
+        if ($condition) {
+            $this->pushValidationRules(['accepted']);
         }
 
         return $this;
@@ -51,6 +60,8 @@ abstract class BooleanField extends Component
     }
 
     /**
+     * @deprecated Use `rules()` instead.
+     *
      * @param  array<int, string>  $rules
      */
     public function validation(array $rules): static
@@ -59,9 +70,7 @@ abstract class BooleanField extends Component
 
         // The boolean rule is intrinsic to a checkbox/toggle — never let a
         // custom rule list drop it.
-        if (! in_array('boolean', $this->validation, true)) {
-            $this->validation[] = 'boolean';
-        }
+        $this->pushValidationRules(['boolean']);
 
         return $this;
     }

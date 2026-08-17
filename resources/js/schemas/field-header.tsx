@@ -124,7 +124,7 @@ export default function FieldHeader({ node, formValues, labelId }: FieldHeaderPr
         node.helperText !== undefined;
 
     return (
-        <div className="mb-1.5 flex items-baseline justify-between gap-2">
+        <div className="mb-1 flex items-baseline justify-between gap-2">
             {labelId ? (
                 <Label htmlFor={labelId}>{label}</Label>
             ) : (
@@ -132,7 +132,7 @@ export default function FieldHeader({ node, formValues, labelId }: FieldHeaderPr
             )}
 
             {hasRightSide ? (
-                <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <div className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
                     {node.hintIcon ? (
                         <HintIconButton icon={node.hintIcon.icon} tooltip={node.hintIcon.tooltip} />
                     ) : null}

@@ -80,6 +80,9 @@ export interface FieldNode {
     searchable?: boolean;
     /** Layout children (grid/section). */
     schema?: FieldNode[];
+    /** Repeatable entry: per-item child-entry nodes (each item is a list of
+     * read-only entry nodes, resolved server-side against that item's data). */
+    items?: FieldNode[][];
     /** Grid: number of equal-width columns. Radio: option-grid columns. Fieldset: child grid columns. */
     columns?: number;
     /** Checkbox list: per-option description map (value => text). */
@@ -92,6 +95,80 @@ export interface FieldNode {
     description?: string;
     /** Tabs: 1-indexed active tab (omitted → 1). */
     activeTab?: number;
+    /** Date/time picker: internal PHP state format (e.g. `Y-m-d H:i:s`). */
+    format?: string;
+    /** Date/time picker: day.js display format (e.g. `M j, Y H:i`). */
+    displayFormat?: string;
+    /** Date/time picker: minimum selectable date (state-format string). */
+    minDate?: string;
+    /** Date/time picker: maximum selectable date (state-format string). */
+    maxDate?: string;
+    /** Date/time picker: disabled dates (state-format strings). */
+    disabledDates?: string[];
+    /** Date/time picker: first day of the week (1 = Monday … 7 = Sunday). */
+    firstDayOfWeek?: number;
+    /** Date/time picker: step for the hour/minute/second inputs. */
+    hoursStep?: number;
+    minutesStep?: number;
+    secondsStep?: number;
+    /** Date/time picker: IANA timezone name. */
+    timezone?: string;
+    /** Date/time picker: locale code. */
+    locale?: string;
+    /** Date/time picker: close the panel after selecting a date. */
+    closeOnDateSelection?: boolean;
+    /** Tags input: allow dragging tags to reorder. */
+    reorderable?: boolean;
+    /** Tags input: separator used to split a string initial value into tags. */
+    separator?: string;
+    /** Tags input: keys that finalize a tag as it's typed. */
+    splitKeys?: string[];
+    /** Tags input: clickable tag suggestions not already added. */
+    suggestions?: string[];
+    /** Tags input: label prefix/suffix rendered on each tag. */
+    tagPrefix?: string;
+    tagSuffix?: string;
+    /** Toggle buttons: render as a joined button group. */
+    grouped?: boolean;
+    /** Toggle buttons: hide option labels, showing icons only. */
+    hiddenButtonLabels?: boolean;
+    /** Toggle buttons: per-option icon names keyed by option value. */
+    icons?: Record<string, string>;
+    /** Toggle buttons: per-option color names keyed by option value. */
+    colors?: Record<string, string>;
+    /** Toggle buttons: per-option tooltips keyed by option value. */
+    tooltips?: Record<string, string>;
+    /** Key value: allow adding/removing/reordering rows. */
+    addable?: boolean;
+    deletable?: boolean;
+    /** Key value: independently toggle key/value editing. */
+    editableKeys?: boolean;
+    editableValues?: boolean;
+    addActionLabel?: string;
+    keyLabel?: string;
+    valueLabel?: string;
+    keyPlaceholder?: string;
+    valuePlaceholder?: string;
+    /** Repeater: rows the form opens with, built from the row fields' defaults. */
+    defaultItems?: number;
+    /** Repeater: minimum/maximum row count (enforced in add/remove + validation). */
+    minItems?: number;
+    maxItems?: number;
+    /** Repeater: rows are collapsible; `collapsed` starts them all folded. */
+    collapsible?: boolean;
+    collapsed?: boolean;
+    /** Repeater: columns per row (1–6, grid layout). */
+    grid?: number;
+    /** Repeater: per-row heading, static or a `{field}` token template. */
+    itemLabel?: string;
+    /** Repeater: duplicate a row. */
+    cloneable?: boolean;
+    /** Repeater: reordering via drag handle and/or up-down buttons. */
+    reorderableWithDragAndDrop?: boolean;
+    reorderableWithButtons?: boolean;
+    /** Repeater: number the row headings; show/hide the per-row header bar. */
+    itemNumbers?: boolean;
+    itemHeaders?: boolean;
     [key: string]: unknown;
 }
 

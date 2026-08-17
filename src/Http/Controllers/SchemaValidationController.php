@@ -48,9 +48,13 @@ class SchemaValidationController
             return response()->json(['error' => "Unknown field [{$fieldName}]."], JsonResponse::HTTP_NOT_FOUND);
         }
 
+        // Conditional unique rules evaluate against the submitted sibling
+        // values when present (a per-request snapshot).
+        $resolved->setValidationData($request->input('data', []));
+
         $rules = array_values(array_filter(
             $field->getValidationRules(),
-            static fn (string $rule): bool => preg_match('/^unique:/', $rule) === 1,
+            static fn (mixed $rule): bool => is_string($rule) && preg_match('/^unique:/', $rule) === 1,
         ));
 
         if ($rules === []) {

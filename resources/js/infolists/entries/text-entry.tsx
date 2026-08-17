@@ -1,5 +1,5 @@
 import { Cell } from '@/tables/cell';
-import type { TableCellDisplay } from '@/tables/types';
+import type { TableCellDisplay, TableCellPresentation } from '@/tables/types';
 import type { EntryProps } from '@/infolists/registry';
 
 /**
@@ -24,7 +24,11 @@ export function TextEntry({ node }: EntryProps) {
         <div className="flex flex-col gap-1">
             <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{node.label}</dt>
             <dd className="text-sm text-foreground">
-                <Cell value={display} placeholder={node.placeholder} />
+                <Cell
+                    value={display}
+                    placeholder={node.placeholder}
+                    presentation={node as TableCellPresentation}
+                />
             </dd>
         </div>
     );

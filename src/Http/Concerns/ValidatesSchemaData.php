@@ -28,6 +28,11 @@ trait ValidatesSchemaData
      */
     protected function schemaValidator(Schema $schema, array $data, ?string $ignoreRecordKey = null, ?string $operation = null): \Illuminate\Validation\Validator
     {
+        // Closures in the rules (conditional required, rule providers) read
+        // the submitted values through a Get injection — a stateless,
+        // per-request snapshot, never a persisted component.
+        $schema->setValidationData($data);
+
         $rules = $ignoreRecordKey !== null
             ? $schema->ignoreCurrentRecordInUniqueRules($schema->getValidationRules($operation), $ignoreRecordKey)
             : $schema->getValidationRules($operation);

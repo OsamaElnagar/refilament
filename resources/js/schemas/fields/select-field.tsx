@@ -203,7 +203,7 @@ export default function SelectField({
                         className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
                     >
                         {searchable ? (
-                            <div className="border-b p-2">
+                            <div className="border-b p-1">
                                 <Input
                                     ref={searchRef}
                                     type="text"
@@ -213,7 +213,7 @@ export default function SelectField({
                                         setHighlighted(0);
                                     }}
                                     placeholder="Search…"
-                                    className="h-8 text-sm"
+                                    className="h-7 text-sm"
                                 />
                             </div>
                         ) : null}
@@ -239,7 +239,7 @@ export default function SelectField({
                                             onMouseEnter={() => setHighlighted(index)}
                                             onClick={() => selectValue(option.value)}
                                             className={cn(
-                                                'flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm transition',
+                                                'flex cursor-pointer items-center justify-between gap-1.5 px-2 py-1 text-sm transition',
                                                 index === safeHighlighted && 'bg-accent',
                                                 active ? 'font-medium text-foreground' : 'text-muted-foreground',
                                             )}
@@ -259,7 +259,7 @@ export default function SelectField({
                 ) : null}
             </div>
 
-            {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
+            {error ? <p className="mt-0.5 text-xs text-destructive">{error}</p> : null}
         </div>
     );
 }

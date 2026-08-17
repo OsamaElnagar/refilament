@@ -35,6 +35,7 @@ function DropdownMenuContent({
   alignOffset = 0,
   side = "bottom",
   align = "start",
+  children,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Positioner> & {
   alignOffset?: number
@@ -58,7 +59,9 @@ function DropdownMenuContent({
             "bg-popover text-popover-foreground data-[open]:transition-[opacity,transform] data-starting-style:opacity-0 data-starting-style:scale-95 data-ending-style:opacity-0 data-ending-style:scale-95 data-[side=bottom]:data-starting-style:translate-y-2 data-[side=left]:data-starting-style:-translate-x-2 data-[side=right]:data-starting-style:translate-x-2 data-[side=top]:data-starting-style:-translate-y-2 data-[side=bottom]:data-ending-style:translate-y-2 data-[side=left]:data-ending-style:-translate-x-2 data-[side=right]:data-ending-style:translate-x-2 data-[side=top]:data-ending-style:-translate-y-2 z-50 min-w-[8rem] overflow-hidden rounded-md border p-1 shadow-md",
             className
           )}
-        />
+        >
+          {children}
+        </DropdownMenuPrimitive.Popup>
       </DropdownMenuPrimitive.Positioner>
     </DropdownMenuPrimitive.Portal>
   )
@@ -158,6 +161,12 @@ function DropdownMenuRadioItem({
   )
 }
 
+/**
+ * Maps to Base UI's `Menu.GroupLabel`, which hard-requires a
+ * `MenuGroupContext` from an ancestor `<DropdownMenuGroup>` (Base UI error
+ * #31 is thrown otherwise). Wrap this component (and the items it labels)
+ * in a `DropdownMenuGroup`.
+ */
 function DropdownMenuLabel({
   className,
   inset,
@@ -240,6 +249,7 @@ function DropdownMenuSubTrigger({
 function DropdownMenuSubContent({
   className,
   sideOffset = 0,
+  children,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Positioner> & {
   sideOffset?: number
@@ -260,7 +270,9 @@ function DropdownMenuSubContent({
             "bg-popover text-popover-foreground data-[open]:transition-[opacity,transform] data-starting-style:opacity-0 data-starting-style:scale-95 data-ending-style:opacity-0 data-ending-style:scale-95 z-50 min-w-[8rem] overflow-hidden rounded-md border p-1 shadow-lg",
             className
           )}
-        />
+        >
+          {children}
+        </DropdownMenuPrimitive.Popup>
       </DropdownMenuPrimitive.Positioner>
     </DropdownMenuPrimitive.Portal>
   )

@@ -9,7 +9,7 @@ it('serves the schema playground as an Inertia page', function () {
     $response->assertJsonPath('component', 'refilament/playground');
     $response->assertJsonPath('props.id', 'playground');
     $response->assertJsonPath('props.contract', 1);
-    $response->assertJsonCount(7, 'props.schema');
+    $response->assertJsonCount(17, 'props.schema');
 
     // Section 1 — post details, containing a 2-column grid.
     $response->assertJsonPath('props.schema.0.type', 'section');
@@ -93,12 +93,12 @@ it('serves the schema playground as an Inertia page', function () {
     $response->assertJsonPath('props.schema.3.schema.1.schema.0.type', 'text_input');
     $response->assertJsonPath('props.schema.3.schema.1.schema.0.name', 'publish_date');
     $response->assertJsonPath('props.schema.3.schema.1.schema.0.inputType', 'date');
-    $response->assertJsonPath('props.schema.3.schema.1.schema.0.validation', ['date', 'nullable']);
+    $response->assertJsonPath('props.schema.3.schema.1.schema.0.validation', ['date']);
 
     $response->assertJsonPath('props.schema.3.schema.1.schema.1.type', 'text_input');
     $response->assertJsonPath('props.schema.3.schema.1.schema.1.name', 'publish_time');
     $response->assertJsonPath('props.schema.3.schema.1.schema.1.inputType', 'time');
-    $response->assertJsonPath('props.schema.3.schema.1.schema.1.validation', ['date_format:H:i', 'nullable']);
+    $response->assertJsonPath('props.schema.3.schema.1.schema.1.validation', ['date_format:H:i']);
 
     $response->assertJsonPath('props.schema.3.schema.1.schema.2.type', 'text_input');
     $response->assertJsonPath('props.schema.3.schema.1.schema.2.name', 'reading_time');
@@ -107,64 +107,64 @@ it('serves the schema playground as an Inertia page', function () {
     $response->assertJsonPath('props.schema.3.schema.1.schema.2.validation', ['numeric', 'min:0', 'max:120']);
 
     // Section 5 — visibility rules (slice 2.4): sibling-driven show/hide.
-    $response->assertJsonPath('props.schema.4.type', 'section');
-    $response->assertJsonPath('props.schema.4.heading', 'Visibility rules');
-    $response->assertJsonPath('props.schema.4.schema.0.type', 'grid');
+    $response->assertJsonPath('props.schema.5.type', 'section');
+    $response->assertJsonPath('props.schema.5.heading', 'Visibility rules');
+    $response->assertJsonPath('props.schema.5.schema.0.type', 'grid');
 
-    $response->assertJsonPath('props.schema.4.schema.0.schema.0.name', 'show_author');
-    $response->assertJsonPath('props.schema.4.schema.0.schema.0.type', 'toggle');
-    $response->assertJsonPath('props.schema.4.schema.0.schema.1.name', 'author_bio');
-    $response->assertJsonPath('props.schema.4.schema.0.schema.1.whenTruthy', ['show_author']);
+    $response->assertJsonPath('props.schema.5.schema.0.schema.0.name', 'show_author');
+    $response->assertJsonPath('props.schema.5.schema.0.schema.0.type', 'toggle');
+    $response->assertJsonPath('props.schema.5.schema.0.schema.1.name', 'author_bio');
+    $response->assertJsonPath('props.schema.5.schema.0.schema.1.whenTruthy', ['show_author']);
 
-    $response->assertJsonPath('props.schema.4.schema.0.schema.2.name', 'comment_review_note');
-    $response->assertJsonPath('props.schema.4.schema.0.schema.2.whenFalsy', ['allow_comments']);
+    $response->assertJsonPath('props.schema.5.schema.0.schema.2.name', 'comment_review_note');
+    $response->assertJsonPath('props.schema.5.schema.0.schema.2.whenFalsy', ['allow_comments']);
 
     // A node with no visibility rule never carries the keys (omit-when-unset).
-    $response->assertJsonMissingPath('props.schema.4.schema.0.schema.0.whenTruthy');
-    $response->assertJsonMissingPath('props.schema.4.schema.0.schema.0.whenFalsy');
+    $response->assertJsonMissingPath('props.schema.5.schema.0.schema.0.whenTruthy');
+    $response->assertJsonMissingPath('props.schema.5.schema.0.schema.0.whenFalsy');
 
     // Section 6 — fieldset + tabs layouts (slice 2.6).
-    $response->assertJsonPath('props.schema.5.type', 'section');
-    $response->assertJsonPath('props.schema.5.heading', 'Fieldset + Tabs layouts');
+    $response->assertJsonPath('props.schema.6.type', 'section');
+    $response->assertJsonPath('props.schema.6.heading', 'Fieldset + Tabs layouts');
 
-    $response->assertJsonPath('props.schema.5.schema.0.type', 'fieldset');
-    $response->assertJsonPath('props.schema.5.schema.0.label', 'Billing address');
-    $response->assertJsonPath('props.schema.5.schema.0.columns', 2);
-    $response->assertJsonPath('props.schema.5.schema.0.schema.0.name', 'company');
-    $response->assertJsonPath('props.schema.5.schema.0.schema.1.name', 'website');
+    $response->assertJsonPath('props.schema.6.schema.0.type', 'fieldset');
+    $response->assertJsonPath('props.schema.6.schema.0.label', 'Billing address');
+    $response->assertJsonPath('props.schema.6.schema.0.columns', 2);
+    $response->assertJsonPath('props.schema.6.schema.0.schema.0.name', 'company');
+    $response->assertJsonPath('props.schema.6.schema.0.schema.1.name', 'website');
 
-    $response->assertJsonPath('props.schema.5.schema.1.type', 'tabs');
-    $response->assertJsonMissingPath('props.schema.5.schema.1.activeTab');
-    $response->assertJsonPath('props.schema.5.schema.1.schema.0.type', 'tab');
-    $response->assertJsonPath('props.schema.5.schema.1.schema.0.label', 'Billing');
-    $response->assertJsonPath('props.schema.5.schema.1.schema.0.schema.0.name', 'plan_frequency');
-    $response->assertJsonPath('props.schema.5.schema.1.schema.1.type', 'tab');
-    $response->assertJsonPath('props.schema.5.schema.1.schema.1.label', 'Plan');
-    $response->assertJsonPath('props.schema.5.schema.1.schema.1.schema.0.name', 'plan_tier');
+    $response->assertJsonPath('props.schema.6.schema.1.type', 'tabs');
+    $response->assertJsonMissingPath('props.schema.6.schema.1.activeTab');
+    $response->assertJsonPath('props.schema.6.schema.1.schema.0.type', 'tab');
+    $response->assertJsonPath('props.schema.6.schema.1.schema.0.label', 'Billing');
+    $response->assertJsonPath('props.schema.6.schema.1.schema.0.schema.0.name', 'plan_frequency');
+    $response->assertJsonPath('props.schema.6.schema.1.schema.1.type', 'tab');
+    $response->assertJsonPath('props.schema.6.schema.1.schema.1.label', 'Plan');
+    $response->assertJsonPath('props.schema.6.schema.1.schema.1.schema.0.name', 'plan_tier');
 
     // Section 7 — invoice arithmetic (slice C3): computed fields carry their
     // client-side expression as data, rendered read-only.
-    $response->assertJsonPath('props.schema.6.type', 'section');
-    $response->assertJsonPath('props.schema.6.heading', 'Invoice arithmetic');
-    $response->assertJsonPath('props.schema.6.schema.0.type', 'grid');
-    $response->assertJsonPath('props.schema.6.schema.0.columns', 2);
+    $response->assertJsonPath('props.schema.7.type', 'section');
+    $response->assertJsonPath('props.schema.7.heading', 'Invoice arithmetic');
+    $response->assertJsonPath('props.schema.7.schema.0.type', 'grid');
+    $response->assertJsonPath('props.schema.7.schema.0.columns', 2);
 
-    $response->assertJsonPath('props.schema.6.schema.0.schema.0.name', 'quantity');
-    $response->assertJsonPath('props.schema.6.schema.0.schema.0.default', 2);
-    $response->assertJsonPath('props.schema.6.schema.0.schema.1.name', 'unit_price');
-    $response->assertJsonPath('props.schema.6.schema.0.schema.1.default', 49.99);
+    $response->assertJsonPath('props.schema.7.schema.0.schema.0.name', 'quantity');
+    $response->assertJsonPath('props.schema.7.schema.0.schema.0.default', 2);
+    $response->assertJsonPath('props.schema.7.schema.0.schema.1.name', 'unit_price');
+    $response->assertJsonPath('props.schema.7.schema.0.schema.1.default', 49.99);
 
-    $response->assertJsonPath('props.schema.6.schema.0.schema.2.name', 'subtotal');
-    $response->assertJsonPath('props.schema.6.schema.0.schema.2.computed', 'quantity * unit_price');
-    $response->assertJsonPath('props.schema.6.schema.0.schema.2.readOnly', true);
-    $response->assertJsonPath('props.schema.6.schema.0.schema.2.validation', ['numeric', 'nullable']);
+    $response->assertJsonPath('props.schema.7.schema.0.schema.2.name', 'subtotal');
+    $response->assertJsonPath('props.schema.7.schema.0.schema.2.computed', 'quantity * unit_price');
+    $response->assertJsonPath('props.schema.7.schema.0.schema.2.readOnly', true);
+    $response->assertJsonPath('props.schema.7.schema.0.schema.2.validation', ['numeric']);
 
-    $response->assertJsonPath('props.schema.6.schema.0.schema.3.name', 'vat_amount');
-    $response->assertJsonPath('props.schema.6.schema.0.schema.3.computed', 'subtotal * 0.14');
+    $response->assertJsonPath('props.schema.7.schema.0.schema.3.name', 'vat_amount');
+    $response->assertJsonPath('props.schema.7.schema.0.schema.3.computed', 'subtotal * 0.14');
 
-    $response->assertJsonPath('props.schema.6.schema.0.schema.4.name', 'total_amount');
-    $response->assertJsonPath('props.schema.6.schema.0.schema.4.computed', 'subtotal + vat_amount');
-    $response->assertJsonPath('props.schema.6.schema.0.schema.4.columnSpan', 2);
+    $response->assertJsonPath('props.schema.7.schema.0.schema.4.name', 'total_amount');
+    $response->assertJsonPath('props.schema.7.schema.0.schema.4.computed', 'subtotal + vat_amount');
+    $response->assertJsonPath('props.schema.7.schema.0.schema.4.columnSpan', 2);
 
     $response->assertJsonPath('props.data', [
         'title' => '',
@@ -187,6 +187,27 @@ it('serves the schema playground as an Inertia page', function () {
         'website' => '',
         'plan_frequency' => 'monthly',
         'plan_tier' => 'pro',
+        'product_name' => '',
+        'product_price' => '',
+        'shipping_city' => '',
+        'shipping_zip' => '',
+        'agree_terms' => false,
+        'team_members' => [['name' => '', 'role' => '']],
+        'attachment' => '',
+        'body' => '',
+        'launch_date' => '2025-06-15',
+        'launch_time' => '10:30',
+        'published_at' => '2025-06-15 10:30:00',
+        'closing_date' => '',
+        'tags' => ['laravel', 'inertia'],
+        'priority' => 'normal',
+        'labels' => ['featured', 'hot'],
+        'accent_color' => '#6366f1',
+        'danger_color' => 'rgba(239, 68, 68, 0.8)',
+        'meta' => [
+            ['key' => 'theme', 'value' => 'dark'],
+            ['key' => 'language', 'value' => 'en'],
+        ],
         'quantity' => 2,
         'unit_price' => 49.99,
         'subtotal' => null,
@@ -194,4 +215,16 @@ it('serves the schema playground as an Inertia page', function () {
         'total_amount' => null,
     ]);
     $response->assertJsonPath('props.errors', []);
+
+    // Wizard layout (slice: Wizard) — the final playground section is a
+    // multi-step container; each step carries its label/description/icon and
+    // its own schema.
+    $response->assertJsonPath('props.schema.16.type', 'wizard');
+    $response->assertJsonPath('props.schema.16.skippable', true);
+    $response->assertJsonPath('props.schema.16.schema.0.type', 'wizard-step');
+    $response->assertJsonPath('props.schema.16.schema.0.label', 'Basics');
+    $response->assertJsonPath('props.schema.16.schema.0.description', 'Post details');
+    $response->assertJsonPath('props.schema.16.schema.0.icon', 'pencil');
+    $response->assertJsonPath('props.schema.16.schema.0.schema.0.name', 'wizard_title');
+    $response->assertJsonPath('props.schema.16.schema.1.label', 'Publishing');
 });

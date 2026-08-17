@@ -1,0 +1,62 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use Refilament\Refilament\Pages\Page;
+use Refilament\Refilament\Refilament;
+use Refilament\Refilament\Schemas\Schema;
+
+class {{ class }} extends Page
+{
+    protected static bool $shouldRegisterNavigation = true;
+
+    /**
+     * Prompts before navigating away while the form holds unsaved changes —
+     * disable by setting this to false.
+     */
+    protected static bool $hasUnsavedDataChangesAlert = true;
+
+    public static function getSlug(): string
+    {
+        return '{{ slug }}';
+    }
+
+    public static function getInertiaComponent(): string
+    {
+        return 'refilament/page-form';
+    }
+
+    /**
+     * The page's form (the page-forms slice — docs/ROADMAP.md). The schema is
+     * serialized into the page payload and submitted through the typed submit
+     * endpoint: state is client-held, rules validate server-side, and the
+     * submitUsing() closure persists the validated data. getFormData()
+     * supplies the starting values (defaults to the fields' default()s — a
+     * page bound to a record overrides it to load that record).
+     */
+    public static function form(Schema $schema): Schema
+    {
+        return $schema
+            ->components([
+                // TextInput::make('name')
+                //     ->label('Name')
+                //     ->required(),
+            ])
+            ->submitUsing(function (array $data): void {
+                // Persist the validated data here.
+            });
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function getPanelViewData(Refilament $refilament): array
+    {
+        return [
+            // 'description' => 'A page form — state is client-held, validated
+            // server-side on submit.',
+        ];
+    }
+}

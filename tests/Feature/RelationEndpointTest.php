@@ -85,7 +85,12 @@ it('applies a scoped select filter to the owner\'s records', function () {
 
     $response->assertOk();
     expect($response->json('total'))->toBe(2);
-    expect(array_column($response->json('rows'), 'is_visible'))->toBe([false, false]);
+    // is_visible is a BooleanColumn — each row ships the structured
+    // boolean display ({ value: Yes/No, icon, iconColor }).
+    expect(array_column($response->json('rows'), 'is_visible'))->toBe([
+        ['value' => 'No', 'icon' => 'x-circle', 'iconColor' => 'danger'],
+        ['value' => 'No', 'icon' => 'x-circle', 'iconColor' => 'danger'],
+    ]);
 });
 
 it('rejects an unknown resource', function () {

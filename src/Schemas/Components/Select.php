@@ -49,9 +49,24 @@ class Select extends Component
     protected ?string $relationshipLabelAttribute = null;
 
     /**
-     * Per-record option label resolver (mirrors Filament's
-     * `getOptionLabelFromRecordUsing()`). Receives the related record and
-     * returns its display text.
+     * Closure called when the "create" option is activated in a relationship
+     * select. Receives the current form data and can return validation rules
+     * or other configuration for the create modal.
+     *
+     * @var Closure(object|array<string, mixed>): mixed|null
+     */
+    protected ?Closure $createOptionCallback = null;
+
+    /**
+     * Closure called when the "edit" option is activated in a relationship
+     * select. Receives the current form data and the selected record.
+     *
+     * @var Closure(object|array<string, mixed>, mixed): mixed|null
+     */
+    protected ?Closure $editOptionCallback = null;
+
+    /**
+     * Resolve a relationship select's options: the related records of the
      *
      * @var Closure(object): string|null
      */
@@ -157,6 +172,34 @@ class Select extends Component
     }
 
     /**
+     * Mark this relationship select to show a "create" option that opens a
+     * modal for creating a new related record. The closure receives the
+     * current form data and can return validation rules or other config.
+     *
+     * @param  Closure(object|array<string, mixed>): mixed  $callback
+     */
+    public function createOption(Closure $callback): static
+    {
+        $this->createOptionCallback = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Mark this relationship select to show an "edit" option that opens a
+     * modal for editing the selected related record. The closure receives
+     * the current form data and the selected record.
+     *
+     * @param  Closure(object|array<string, mixed>, mixed): mixed  $callback
+     */
+    public function editOption(Closure $callback): static
+    {
+        $this->editOptionCallback = $callback;
+
+        return $this;
+    }
+
+    /**
      * Resolve a relationship select's options: the related records of the
      * bound model's relationship, keyed by primary key (string-cast) and
      * labeled by the label attribute (or the per-record resolver when set).
@@ -240,6 +283,8 @@ class Select extends Component
             ...parent::toArray($operation),
             'multiple' => $this->isMultiple() ? true : null,
             'searchable' => $this->isSearchable() ? true : null,
+            'createOption' => $this->createOptionCallback ? true : null,
+            'editOption' => $this->editOptionCallback ? true : null,
         ]);
 
         if ($this->hasOptionsResolver()) {

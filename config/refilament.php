@@ -97,6 +97,23 @@ return [
 
         /*
         |--------------------------------------------------------------------------
+        | Page clusters (the page-clusters slice)
+        |--------------------------------------------------------------------------
+        |
+        | `clusters` is an explicit list of cluster classes. `clusters_path` /
+        | `clusters_namespace` auto-discovery registers every cluster class in
+        | the folder, mirroring Filament's `discoverClusters()`. A cluster
+        | groups pages and resources (those declaring `$cluster`) under one
+        | sidebar entry; its own URL redirects to the first accessible member.
+        |
+        */
+
+        'clusters' => [],
+        'clusters_path' => app_path('Refilament/Clusters'),
+        'clusters_namespace' => 'App\\Refilament\\Clusters',
+
+        /*
+        |--------------------------------------------------------------------------
         | Auth gate (slice 1.9 "auth gate")
         |--------------------------------------------------------------------------
         |
@@ -114,6 +131,44 @@ return [
         'auth_guard' => 'web',
         'login_url' => null,
         'auth_middleware' => [],
+
+        /*
+        |--------------------------------------------------------------------------
+        | First-party auth pages (docs/ROADMAP.md "1.9 auth pages")
+        |--------------------------------------------------------------------------
+        |
+        | The panel's own auth pages, backed by Fortify and served under the
+        | panel's URL prefix (/{path}/login, /{path}/register, ...). Each key
+        | names the page class to serve (see Auth\Pages), or null to leave the
+        | page disabled — the default, matching Filament, where the panel ships
+        | with no auth pages until `->login()` (etc.) is called. The panel
+        | provider overrides these with `->login()`, `->registration()`,
+        | `->passwordReset()` and `->emailVerification()`.
+        |
+        */
+
+        'login_page' => null,
+        'registration_page' => null,
+        'request_password_reset_page' => null,
+        'reset_password_page' => null,
+        'email_verification_page' => null,
+        'two_factor_authentication' => false,
+
+        /*
+        |--------------------------------------------------------------------------
+        | Profile page (Filament's ->profile())
+        |--------------------------------------------------------------------------
+        |
+        | The panel's EditProfile page at /{path}/user/profile, where the
+        | authenticated user updates their name/email/password and manages
+        | two-factor authentication. Null disables the page (the default);
+        | set to `EditProfile::class` to enable, or a consumer's own page
+        | class extending Auth\Pages\AuthPage. The panel provider overrides
+        | this with `->profile()`.
+        |
+        */
+
+        'profile_page' => null,
     ],
 
 ];

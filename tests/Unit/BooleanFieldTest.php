@@ -47,9 +47,9 @@ it('adds the accepted rule for consent-required boxes', function () {
 });
 
 it('keeps the boolean rule when a custom rule list is set', function () {
-    $node = Toggle::make('enabled')->validation(['accepted'])->toArray();
+    $node = Toggle::make('enabled')->rules(['accepted'])->toArray();
 
-    expect($node['validation'])->toBe(['accepted', 'boolean']);
+    expect($node['validation'])->toBe(['boolean', 'accepted']);
 });
 
 it('contributes a false default to the form initial data', function () {

@@ -10,19 +10,15 @@
  * "refilament::" in this package.
  */
 
-return array (
-  'wizard' => 
-  array (
-    'actions' => 
-    array (
-      'previous_step' => 
-      array (
-        'label' => 'الخطوة السابقة',
-      ),
-      'next_step' => 
-      array (
-        'label' => 'الخطوة التالية',
-      ),
-    ),
-  ),
-);
+return [
+    'wizard' => [
+        'actions' => [
+            'previous_step' => [
+                'label' => 'الخطوة السابقة',
+            ],
+            'next_step' => [
+                'label' => 'الخطوة التالية',
+            ],
+        ],
+    ],
+];

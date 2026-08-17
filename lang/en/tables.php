@@ -10,244 +10,187 @@
  * "refilament::" in this package.
  */
 
-return array (
-  'column_manager' => 
-  array (
-    'heading' => 'Columns',
-    'actions' => 
-    array (
-      'apply' => 
-      array (
-        'label' => 'Apply columns',
-      ),
-      'reorder' => 
-      array (
-        'label' => 'Reorder column',
-      ),
-      'reset' => 
-      array (
-        'label' => 'Reset',
-      ),
-    ),
-  ),
-  'columns' => 
-  array (
-    'actions' => 
-    array (
-      'label' => 'Action|Actions',
-    ),
-    'icon' => 
-    array (
-      'boolean' => 
-      array (
-        'true' => 'Yes',
-        'false' => 'No',
-      ),
-    ),
-    'select' => 
-    array (
-      'loading_message' => 'Loading...',
-      'no_options_message' => 'No options available.',
-      'no_search_results_message' => 'No options match your search.',
-      'placeholder' => 'Select an option',
-      'searching_message' => 'Searching...',
-      'search_prompt' => 'Start typing to search...',
-    ),
-    'text' => 
-    array (
-      'actions' => 
-      array (
-        'collapse_list' => 'Show :count less',
-        'expand_list' => 'Show :count more',
-      ),
-      'more_list_items' => 'and :count more',
-    ),
-  ),
-  'fields' => 
-  array (
-    'bulk_select_page' => 
-    array (
-      'label' => 'Select/deselect all items for bulk actions.',
-    ),
-    'bulk_select_record' => 
-    array (
-      'label' => 'Select/deselect item :key for bulk actions.',
-    ),
-    'bulk_select_group' => 
-    array (
-      'label' => 'Select/deselect group :title for bulk actions.',
-    ),
-    'search' => 
-    array (
-      'label' => 'Search',
-      'placeholder' => 'Search',
-      'indicator' => 'Search',
-    ),
-  ),
-  'summary' => 
-  array (
-    'heading' => 'Summary',
-    'subheadings' => 
-    array (
-      'all' => 'All :label',
-      'group' => ':group summary',
-      'page' => 'This page',
-    ),
-    'summarizers' => 
-    array (
-      'average' => 
-      array (
-        'label' => 'Average',
-      ),
-      'count' => 
-      array (
-        'label' => 'Count',
-      ),
-      'sum' => 
-      array (
-        'label' => 'Sum',
-      ),
-    ),
-  ),
-  'actions' => 
-  array (
-    'disable_reordering' => 
-    array (
-      'label' => 'Finish reordering records',
-    ),
-    'enable_reordering' => 
-    array (
-      'label' => 'Reorder records',
-    ),
-    'reorder_record' => 
-    array (
-      'label' => 'Reorder item :key',
-    ),
-    'filter' => 
-    array (
-      'label' => 'Filter',
-    ),
-    'group' => 
-    array (
-      'label' => 'Group',
-    ),
-    'open_bulk_actions' => 
-    array (
-      'label' => 'Bulk actions',
-    ),
-    'column_manager' => 
-    array (
-      'label' => 'Column manager',
-    ),
-    'toggle_record_content' => 
-    array (
-      'label' => 'Expand/collapse item :key',
-    ),
-  ),
-  'empty' => 
-  array (
-    'heading' => 'No :model',
-    'description' => 'Create a :model to get started.',
-  ),
-  'filters' => 
-  array (
-    'actions' => 
-    array (
-      'apply' => 
-      array (
-        'label' => 'Apply filters',
-      ),
-      'remove' => 
-      array (
-        'label' => 'Remove filter',
-      ),
-      'remove_all' => 
-      array (
-        'label' => 'Remove all filters',
-        'tooltip' => 'Remove all filters',
-      ),
-      'reset' => 
-      array (
-        'label' => 'Reset',
-      ),
-    ),
-    'heading' => 'Filters',
-    'indicator' => 'Active filters',
-    'multi_select' => 
-    array (
-      'placeholder' => 'All',
-    ),
-    'select' => 
-    array (
-      'placeholder' => 'All',
-      'relationship' => 
-      array (
-        'empty_option_label' => 'None',
-      ),
-    ),
-    'trashed' => 
-    array (
-      'label' => 'Deleted records',
-      'only_trashed' => 'Only deleted records',
-      'with_trashed' => 'With deleted records',
-      'without_trashed' => 'Without deleted records',
-    ),
-  ),
-  'grouping' => 
-  array (
-    'fields' => 
-    array (
-      'group' => 
-      array (
-        'label' => 'Group by',
-      ),
-      'direction' => 
-      array (
-        'label' => 'Group direction',
-        'options' => 
-        array (
-          'asc' => 'Ascending',
-          'desc' => 'Descending',
-        ),
-      ),
-    ),
-  ),
-  'loading' => 'Loading...',
-  'reorder_indicator' => 'Drag and drop the records into order.',
-  'result_count' => '{0} No results|{1} :count result|[2,*] :count results',
-  'selection_indicator' => 
-  array (
-    'selected_count' => '1 record selected|:count records selected',
-    'actions' => 
-    array (
-      'select_all' => 
-      array (
-        'label' => 'Select all :count',
-      ),
-      'deselect_all' => 
-      array (
-        'label' => 'Deselect all',
-      ),
-    ),
-  ),
-  'sorting' => 
-  array (
-    'fields' => 
-    array (
-      'column' => 
-      array (
-        'label' => 'Sort by',
-      ),
-      'direction' => 
-      array (
-        'label' => 'Sort direction',
-        'options' => 
-        array (
-          'asc' => 'Ascending',
-          'desc' => 'Descending',
-        ),
-      ),
-    ),
-  ),
-  'default_model_label' => 'record',
-);
+return [
+    'column_manager' => [
+        'heading' => 'Columns',
+        'actions' => [
+            'apply' => [
+                'label' => 'Apply columns',
+            ],
+            'reorder' => [
+                'label' => 'Reorder column',
+            ],
+            'reset' => [
+                'label' => 'Reset',
+            ],
+        ],
+    ],
+    'columns' => [
+        'actions' => [
+            'label' => 'Action|Actions',
+        ],
+        'icon' => [
+            'boolean' => [
+                'true' => 'Yes',
+                'false' => 'No',
+            ],
+        ],
+        'select' => [
+            'loading_message' => 'Loading...',
+            'no_options_message' => 'No options available.',
+            'no_search_results_message' => 'No options match your search.',
+            'placeholder' => 'Select an option',
+            'searching_message' => 'Searching...',
+            'search_prompt' => 'Start typing to search...',
+        ],
+        'text' => [
+            'actions' => [
+                'collapse_list' => 'Show :count less',
+                'expand_list' => 'Show :count more',
+            ],
+            'more_list_items' => 'and :count more',
+        ],
+    ],
+    'fields' => [
+        'bulk_select_page' => [
+            'label' => 'Select/deselect all items for bulk actions.',
+        ],
+        'bulk_select_record' => [
+            'label' => 'Select/deselect item :key for bulk actions.',
+        ],
+        'bulk_select_group' => [
+            'label' => 'Select/deselect group :title for bulk actions.',
+        ],
+        'search' => [
+            'label' => 'Search',
+            'placeholder' => 'Search',
+            'indicator' => 'Search',
+        ],
+    ],
+    'summary' => [
+        'heading' => 'Summary',
+        'subheadings' => [
+            'all' => 'All :label',
+            'group' => ':group summary',
+            'page' => 'This page',
+        ],
+        'summarizers' => [
+            'average' => [
+                'label' => 'Average',
+            ],
+            'count' => [
+                'label' => 'Count',
+            ],
+            'sum' => [
+                'label' => 'Sum',
+            ],
+        ],
+    ],
+    'actions' => [
+        'disable_reordering' => [
+            'label' => 'Finish reordering records',
+        ],
+        'enable_reordering' => [
+            'label' => 'Reorder records',
+        ],
+        'reorder_record' => [
+            'label' => 'Reorder item :key',
+        ],
+        'filter' => [
+            'label' => 'Filter',
+        ],
+        'group' => [
+            'label' => 'Group',
+        ],
+        'open_bulk_actions' => [
+            'label' => 'Bulk actions',
+        ],
+        'column_manager' => [
+            'label' => 'Column manager',
+        ],
+        'toggle_record_content' => [
+            'label' => 'Expand/collapse item :key',
+        ],
+    ],
+    'empty' => [
+        'heading' => 'No :model',
+        'description' => 'Create a :model to get started.',
+    ],
+    'filters' => [
+        'actions' => [
+            'apply' => [
+                'label' => 'Apply filters',
+            ],
+            'remove' => [
+                'label' => 'Remove filter',
+            ],
+            'remove_all' => [
+                'label' => 'Remove all filters',
+                'tooltip' => 'Remove all filters',
+            ],
+            'reset' => [
+                'label' => 'Reset',
+            ],
+        ],
+        'heading' => 'Filters',
+        'indicator' => 'Active filters',
+        'multi_select' => [
+            'placeholder' => 'All',
+        ],
+        'select' => [
+            'placeholder' => 'All',
+            'relationship' => [
+                'empty_option_label' => 'None',
+            ],
+        ],
+        'trashed' => [
+            'label' => 'Deleted records',
+            'only_trashed' => 'Only deleted records',
+            'with_trashed' => 'With deleted records',
+            'without_trashed' => 'Without deleted records',
+        ],
+    ],
+    'grouping' => [
+        'fields' => [
+            'group' => [
+                'label' => 'Group by',
+            ],
+            'direction' => [
+                'label' => 'Group direction',
+                'options' => [
+                    'asc' => 'Ascending',
+                    'desc' => 'Descending',
+                ],
+            ],
+        ],
+    ],
+    'loading' => 'Loading...',
+    'reorder_indicator' => 'Drag and drop the records into order.',
+    'result_count' => '{0} No results|{1} :count result|[2,*] :count results',
+    'selection_indicator' => [
+        'selected_count' => '1 record selected|:count records selected',
+        'actions' => [
+            'select_all' => [
+                'label' => 'Select all :count',
+            ],
+            'deselect_all' => [
+                'label' => 'Deselect all',
+            ],
+        ],
+    ],
+    'sorting' => [
+        'fields' => [
+            'column' => [
+                'label' => 'Sort by',
+            ],
+            'direction' => [
+                'label' => 'Sort direction',
+                'options' => [
+                    'asc' => 'Ascending',
+                    'desc' => 'Descending',
+                ],
+            ],
+        ],
+    ],
+    'default_model_label' => 'record',
+];

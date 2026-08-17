@@ -5,23 +5,33 @@ declare(strict_types=1);
 namespace {{ namespace }};
 
 use Refilament\Refilament\Pages\Page;
+use Refilament\Refilament\Refilament;
 
 class {{ class }} extends Page
 {
+    protected static bool $shouldRegisterNavigation = true;
+
+    public static function getSlug(): string
+    {
+        return '{{ slug }}';
+    }
+
     public static function getInertiaComponent(): string
     {
         return '{{ component }}';
     }
 
-    public static function getPayload(): array
+    /**
+     * The Inertia props for this page (docs/CONTRACT.md, "Pages"), computed
+     * server-side per request — served at /refilament/{{ slug }} by the
+     * shared PanelPageController (no app-side route needed).
+     *
+     * @return array<string, mixed>
+     */
+    public static function getPanelViewData(Refilament $refilament): array
     {
         return [
-            // The Inertia props for this page (docs/CONTRACT.md, "Pages").
-            // Wire a route to it in the app, e.g.:
-            // Route::get('/refilament/{{ slug }}', fn () => Inertia::render(
-            //     static::getInertiaComponent(),
-            //     static::getPayload(),
-            // ));
+            // 'description' => 'What this page is for.',
         ];
     }
 }

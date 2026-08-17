@@ -22,12 +22,12 @@ class CommentsForm
             ->components([
                 TextInput::make('title')
                     ->label('Title')
-                    ->validation(['required', 'string', 'max:255'])
+                    ->rules(['required', 'string', 'max:255'])
                     ->required(),
 
                 Textarea::make('content')
                     ->label('Content')
-                    ->validation(['required', 'string'])
+                    ->rules(['required', 'string'])
                     ->required(),
 
                 Toggle::make('is_visible')

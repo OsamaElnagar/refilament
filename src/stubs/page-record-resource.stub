@@ -1,0 +1,60 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use Refilament\Refilament\Infolists\Components\TextEntry;
+use Refilament\Refilament\Refilament;
+use Refilament\Refilament\Resources\Pages\Page;
+use Refilament\Refilament\Schemas\Schema;
+
+class {{ class }} extends Page
+{
+    /**
+     * The resource this page belongs to.
+     *
+     * @var class-string<Refilament\Refilament\Resources\Resource>
+     */
+    protected static ?string $resource = {{ resource }}::class;
+
+    /**
+     * The record-scoped path — served at /{resource}/{record}/manage with
+     * the {record} segment constrained to [0-9]+ (record pages assume
+     * integer primary keys today, docs/CONTRACT.md).
+     */
+    protected static string $routePath = '/{record}/manage';
+
+    public static function getInertiaComponent(): string
+    {
+        return 'refilament/page-infolist';
+    }
+
+    /**
+     * The record-scoped read-only display (the record-pages slice) — entries
+     * resolve against the URL record, so a /{record}/manage page reads the
+     * record it manages with no extra wiring. Host a form instead by
+     * declaring form() and rendering refilament/page-form: the form
+     * pre-fills from the record and saves through the record-bound submit
+     * endpoint (the payload ships the submitUrl automatically).
+     */
+    public static function infolist(Schema $schema): Schema
+    {
+        return $schema->components([
+            // TextEntry::make('title')->label('Title'),
+        ]);
+    }
+
+    public static function getPayload(string $resource, Refilament $refilament, ?string $record = null): array
+    {
+        // Resolves the {record} segment through the page's record-binding
+        // query and gates it with the resource's view policy (pass 'edit'
+        // for a page that edits). 404s when gone, 403s when unauthorized.
+        $model = static::resolveRecord($resource, (string) $record);
+
+        return [
+            'record' => $model->getKey(),
+            ...parent::getPayload($resource, $refilament, $record),
+        ];
+    }
+}

@@ -1,0 +1,52 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use Refilament\Refilament\Pages\Page;
+use Refilament\Refilament\Refilament;
+use Refilament\Refilament\Tables\Table;
+
+class {{ class }} extends Page
+{
+    protected static bool $shouldRegisterNavigation = true;
+
+    public static function getSlug(): string
+    {
+        return '{{ slug }}';
+    }
+
+    public static function getInertiaComponent(): string
+    {
+        return 'refilament/page-table';
+    }
+
+    /**
+     * The page's table (the pages-as-tables slice — docs/ROADMAP.md). The
+     * payload ships the table definition + the first page of rows, and the
+     * generic refilament/page-table component renders it with the full table
+     * machinery — pagination, sorting, search, filters and record/bulk
+     * actions all run through the typed table endpoints server-side.
+     */
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->query(
+                // \App\Models\Post::query(),
+            )
+            ->columns([
+                // Column::make('title')->label('Title')->searchable()->sortable(),
+            ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function getPanelViewData(Refilament $refilament): array
+    {
+        return [
+            // 'description' => 'A page hosting a table — the report/dashboard idiom.',
+        ];
+    }
+}

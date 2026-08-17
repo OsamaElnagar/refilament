@@ -51,6 +51,10 @@ class SchemaSubmitController
         // The client sends its operation (create vs edit) as a query param.
         $operation = $request->query('operation');
 
+        // Conditional rules evaluate against the submitted values via a Get
+        // injection — a per-request snapshot (docs/ARCHITECTURE.md).
+        $resolved->setValidationData($data);
+
         $validator = Validator::make($data, $resolved->getValidationRules(is_string($operation) ? $operation : null));
         $validator->setAttributeNames($resolved->getValidationAttributes());
 
@@ -72,7 +76,10 @@ class SchemaSubmitController
             ]);
         }
 
-        $message = $resolved->getSuccessMessage();
+        // A model-bound schema that created through its default path (no
+        // submitUsing()/successMessage() — slice 2.6) still gets a sensible
+        // toast, mirroring the update endpoint's default message.
+        $message = $resolved->getSuccessMessage() ?? ($resolved->getModel() !== null ? 'Created successfully.' : null);
 
         return response()->json([
             'success' => true,

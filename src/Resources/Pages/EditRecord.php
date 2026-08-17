@@ -22,6 +22,14 @@ use Refilament\Refilament\Schemas\Components\TextInput;
  */
 class EditRecord extends Page
 {
+    /**
+     * The page's own crumb in breadcrumbs (slice 1.11) — "Edit", matching
+     * Filament's edit-record breadcrumb default. The record crumb (the
+     * record's title, linked per canView/canEdit) sits between the resource
+     * crumb and this one.
+     */
+    protected static ?string $breadcrumb = 'Edit';
+
     public static function getInertiaComponent(): string
     {
         return 'refilament/resource-edit';
@@ -82,7 +90,10 @@ class EditRecord extends Page
             'errors' => [],
             'record' => $model->getKey(),
             'relations' => $relations,
-            ...parent::getPayload($resource, $refilament),
+            // The record key forwards to the base payload so the record
+            // breadcrumb (slice 1.11) resolves the model through the page's
+            // record-binding query.
+            ...parent::getPayload($resource, $refilament, $record),
         ];
     }
 }

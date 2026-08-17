@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Refilament\Refilament\Infolists\Components;
 
+use ArrayAccess;
 use BackedEnum;
 use Closure;
 use Illuminate\Support\Carbon;
@@ -11,6 +12,19 @@ use Illuminate\Support\Number;
 use Illuminate\Support\Str;
 use LogicException;
 use Refilament\Refilament\Schemas\Components\Component;
+use Refilament\Refilament\Support\Concerns\EvaluatesClosures;
+use Refilament\Refilament\Support\Concerns\HasAlignment;
+use Refilament\Refilament\Support\Concerns\HasColor;
+use Refilament\Refilament\Support\Concerns\HasExtraAttributes;
+use Refilament\Refilament\Support\Concerns\HasFontFamily;
+use Refilament\Refilament\Support\Concerns\HasIcon;
+use Refilament\Refilament\Support\Concerns\HasIconColor;
+use Refilament\Refilament\Support\Concerns\HasIconPosition;
+use Refilament\Refilament\Support\Concerns\HasIconSize;
+use Refilament\Refilament\Support\Concerns\HasLineClamp;
+use Refilament\Refilament\Support\Concerns\HasTooltip;
+use Refilament\Refilament\Support\Concerns\HasWeight;
+use Refilament\Refilament\Support\Concerns\HasWidth;
 
 /**
  * Infolist entry (slice 3.3 — docs/ROADMAP.md).
@@ -29,27 +43,34 @@ use Refilament\Refilament\Schemas\Components\Component;
  */
 abstract class Entry extends Component
 {
+    use EvaluatesClosures;
+    use HasAlignment;
+    use HasColor;
+    use HasExtraAttributes;
+    use HasFontFamily;
+    use HasIcon;
+    use HasIconColor;
+    use HasIconPosition;
+    use HasIconSize;
+    use HasLineClamp;
+    use HasTooltip;
+    use HasWeight;
+    use HasWidth;
+
     protected ?string $placeholder = null;
 
     /**
      * Server-side resolver for this entry's raw state (e.g. a related model
      * attribute). Mirrors Filament's getStateUsing(); the closure never
      * survives serialization — the schema resolver rebuilds it per request.
-     *
-     * @var Closure(mixed): mixed|null
      */
     protected ?Closure $stateResolver = null;
 
     /**
      * Server-side value formatter. Receives the resolved state and the
      * record; returns the display value (usually a string). Never serialized.
-     *
-     * @var Closure(mixed, mixed): mixed|null
      */
     protected ?Closure $formatUsing = null;
-
-    /** @var string|array<int|string, string|Closure>|Closure|null */
-    protected mixed $color = null;
 
     protected bool $isBadge = false;
 
@@ -57,12 +78,6 @@ abstract class Entry extends Component
     protected mixed $url = null;
 
     protected bool $openUrlInNewTab = false;
-
-    /** @var string|Closure|null */
-    protected mixed $icon = null;
-
-    /** @var string|Closure|null */
-    protected mixed $iconColor = null;
 
     public function placeholder(?string $placeholder): static
     {
@@ -77,8 +92,6 @@ abstract class Entry extends Component
      * `fn (Post $record): ?string => $record->user?->name`. The closure
      * never survives serialization; the schema resolver rebuilds it when the
      * infolist is served.
-     *
-     * @param  Closure(mixed $record): mixed  $resolver
      */
     public function getStateUsing(Closure $resolver): static
     {
@@ -91,8 +104,6 @@ abstract class Entry extends Component
      * Register a server-side formatter for this entry's state. The closure
      * receives the (already resolved) raw state and the record, and returns
      * the displayed value. Mirrors Filament's formatStateUsing().
-     *
-     * @param  Closure(mixed $state, mixed $record): mixed  $formatter
      */
     public function formatStateUsing(Closure $formatter): static
     {
@@ -180,19 +191,6 @@ abstract class Entry extends Component
     }
 
     /**
-     * Color the value (text or badge). Accepts a static name, an array map,
-     * or a per-record closure resolving the color from the state.
-     *
-     * @param  string|array<int|string, string|Closure>|Closure  $color
-     */
-    public function color(string|array|Closure $color): static
-    {
-        $this->color = $color;
-
-        return $this;
-    }
-
-    /**
      * A state → color mapping (the `->badge()->color(fn ...)` idiom's static
      * cousin). Mirrors Column::colors().
      *
@@ -251,27 +249,6 @@ abstract class Entry extends Component
         return $this;
     }
 
-    /**
-     * Render an icon beside the value. Accepts a static icon key or a
-     * per-record closure resolving to an icon key.
-     */
-    public function icon(string|Closure $icon): static
-    {
-        $this->icon = $icon;
-
-        return $this;
-    }
-
-    /**
-     * Color the icon (independent of the value color).
-     */
-    public function iconColor(string|Closure $iconColor): static
-    {
-        $this->iconColor = $iconColor;
-
-        return $this;
-    }
-
     public function getPlaceholder(): ?string
     {
         return $this->placeholder;
@@ -298,7 +275,13 @@ abstract class Entry extends Component
     {
         $state = $this->resolveRawState($record);
 
-        return $this->formatUsing !== null ? ($this->formatUsing)($state, $record) : $state;
+        return $this->formatUsing !== null
+            ? $this->evaluate(
+                $this->formatUsing,
+                ['state' => $state, 'record' => $record],
+                $this->recordTypeInjections($record),
+            )
+            : $state;
     }
 
     /**
@@ -358,6 +341,61 @@ abstract class Entry extends Component
             }
         }
 
+        // Column-level presentation (Slice — entry presentation). Each getter
+        // resolves through EvaluatesClosures, so a closure config yields its
+        // value here (no state injection for these — they are definition-level).
+        $tooltip = $this->getTooltip();
+
+        if ($tooltip !== null) {
+            $payload['tooltip'] = $tooltip;
+        }
+
+        $alignment = $this->getAlignment();
+
+        if ($alignment !== null) {
+            $payload['alignment'] = $alignment instanceof BackedEnum ? $alignment->value : $alignment;
+        }
+
+        $width = $this->getWidth();
+
+        if ($width !== null) {
+            $payload['width'] = $width;
+        }
+
+        $weight = $this->getWeight();
+
+        if ($weight !== null) {
+            $payload['weight'] = $weight instanceof BackedEnum ? $weight->value : $weight;
+        }
+
+        $fontFamily = $this->getFontFamily();
+
+        if ($fontFamily !== null) {
+            $payload['fontFamily'] = $fontFamily instanceof BackedEnum ? $fontFamily->value : $fontFamily;
+        }
+
+        $lineClamp = $this->getLineClamp();
+
+        if ($lineClamp !== null) {
+            $payload['lineClamp'] = $lineClamp;
+        }
+
+        if ($this->hasIconPosition()) {
+            $payload['iconPosition'] = $this->getIconPosition()->value;
+        }
+
+        $iconSize = $this->getIconSize();
+
+        if ($iconSize !== null) {
+            $payload['iconSize'] = $iconSize instanceof BackedEnum ? $iconSize->value : $iconSize;
+        }
+
+        $extraAttributes = $this->getExtraAttributes();
+
+        if ($extraAttributes !== []) {
+            $payload['extraAttributes'] = $extraAttributes;
+        }
+
         return $payload;
     }
 
@@ -367,13 +405,25 @@ abstract class Entry extends Component
     private function resolveRawState(mixed $record): mixed
     {
         if ($this->stateResolver !== null) {
-            return ($this->stateResolver)($record);
+            return $this->evaluate(
+                $this->stateResolver,
+                ['record' => $record],
+                $this->recordTypeInjections($record),
+            );
         }
 
         $name = $this->getName();
 
         if ($name === null) {
             return null;
+        }
+
+        // The record may be a plain array / ArrayAccess — the per-item data of
+        // a RepeatableEntry. data_get() resolves both arrays and models, so an
+        // item's named attribute resolves uniformly (Filament's RepeatableEntry
+        // binds each item's array data to its child entries too).
+        if (is_array($record) || $record instanceof ArrayAccess) {
+            return data_get($record, $name);
         }
 
         return $this->isRelationship()
@@ -383,10 +433,13 @@ abstract class Entry extends Component
 
     private function resolveColorFor(mixed $record): ?string
     {
+        // Evaluated through a local so the closure's result type stays open
+        // (mixed) — a per-record color closure may legitimately resolve to
+        // false or a BackedEnum, and the guards below handle those.
         $color = $this->color;
 
         if ($color instanceof Closure) {
-            $color = ($color)($this->resolveRawState($record));
+            $color = $this->evaluate($color, ['state' => $this->resolveRawState($record)]);
         }
 
         if ($color === null || $color === false) {
@@ -408,11 +461,11 @@ abstract class Entry extends Component
 
     private function resolveIconFor(mixed $record): ?string
     {
-        $icon = $this->icon;
-
-        if ($icon instanceof Closure) {
-            $icon = ($icon)($record);
-        }
+        $icon = $this->evaluate(
+            $this->icon,
+            ['record' => $record, 'state' => $this->resolveRawState($record)],
+            $this->recordTypeInjections($record),
+        );
 
         if ($icon === null || $icon === false || $icon === '') {
             return null;
@@ -426,7 +479,7 @@ abstract class Entry extends Component
         $color = $this->iconColor;
 
         if ($color instanceof Closure) {
-            $color = ($color)($record);
+            $color = $this->evaluate($color, ['record' => $record], $this->recordTypeInjections($record));
         }
 
         if ($color === null || $color === false) {
@@ -438,11 +491,11 @@ abstract class Entry extends Component
 
     private function resolveUrlFor(mixed $record): ?string
     {
-        $url = $this->url;
-
-        if ($url instanceof Closure) {
-            $url = ($url)($record);
-        }
+        $url = $this->evaluate(
+            $this->url,
+            ['record' => $record],
+            $this->recordTypeInjections($record),
+        );
 
         return ($url === null || $url === '') ? null : (string) $url;
     }

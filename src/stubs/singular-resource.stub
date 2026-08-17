@@ -1,0 +1,58 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use {{ model }};
+use Refilament\Refilament\Pages\Page;
+use Refilament\Refilament\Refilament;
+use Refilament\Refilament\Schemas\Schema;
+
+class {{ class }} extends Page
+{
+    protected static bool $shouldRegisterNavigation = true;
+
+    /**
+     * The browser prompts before navigating away while the form is dirty.
+     */
+    protected static bool $hasUnsavedDataChangesAlert = true;
+
+    /**
+     * The model this page's form edits — the singular-resource pattern
+     * (docs/ROADMAP.md "1.14 Singular resources"): ONE record, auto-created
+     * on the first save, loaded into the form and updated afterwards.
+     * Override getRecordQuery() to scope which record, e.g.
+     * ->where('is_homepage', true).
+     */
+    protected static ?string $model = {{ model }}::class;
+
+    public static function getSlug(): string
+    {
+        return '{{ slug }}';
+    }
+
+    public static function getInertiaComponent(): string
+    {
+        return 'refilament/page-form';
+    }
+
+    public static function form(Schema $schema): Schema
+    {
+        return $schema
+            ->successMessage('Saved.')
+            ->components([
+                // TextInput::make('name')->label('Name')->required(),
+            ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function getPanelViewData(Refilament $refilament): array
+    {
+        return [
+            // 'description' => 'A singular resource — one record, auto-created on the first save.',
+        ];
+    }
+}

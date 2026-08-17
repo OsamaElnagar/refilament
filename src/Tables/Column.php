@@ -12,6 +12,20 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Traits\Macroable;
 use LogicException;
 use Refilament\Refilament\Support\Concerns\CanBeConfigured;
+use Refilament\Refilament\Support\Concerns\EvaluatesClosures;
+use Refilament\Refilament\Support\Concerns\HasAlignment;
+use Refilament\Refilament\Support\Concerns\HasColor;
+use Refilament\Refilament\Support\Concerns\HasExtraAttributes;
+use Refilament\Refilament\Support\Concerns\HasFontFamily;
+use Refilament\Refilament\Support\Concerns\HasIcon;
+use Refilament\Refilament\Support\Concerns\HasIconColor;
+use Refilament\Refilament\Support\Concerns\HasIconPosition;
+use Refilament\Refilament\Support\Concerns\HasIconSize;
+use Refilament\Refilament\Support\Concerns\HasLineClamp;
+use Refilament\Refilament\Support\Concerns\HasPlaceholder;
+use Refilament\Refilament\Support\Concerns\HasTooltip;
+use Refilament\Refilament\Support\Concerns\HasWeight;
+use Refilament\Refilament\Support\Concerns\HasWidth;
 use Refilament\Refilament\Tables\Summarizers\Summarizer;
 
 /**
@@ -34,13 +48,25 @@ use Refilament\Refilament\Tables\Summarizers\Summarizer;
 class Column
 {
     use CanBeConfigured;
+    use EvaluatesClosures;
+    use HasAlignment;
+    use HasColor;
+    use HasExtraAttributes;
+    use HasFontFamily;
+    use HasIcon;
+    use HasIconColor;
+    use HasIconPosition;
+    use HasIconSize;
+    use HasLineClamp;
+    use HasPlaceholder;
+    use HasTooltip;
+    use HasWeight;
+    use HasWidth;
     use Macroable;
 
     protected ?string $label = null;
 
     protected bool $shouldTranslateLabel = false;
-
-    protected ?string $placeholder = null;
 
     protected bool $sortable = false;
 
@@ -53,17 +79,32 @@ class Column
      * model attribute). Mirrors Filament's getStateUsing(); the closure never
      * survives serialization — the table resolver rebuilds it when rows are
      * served (docs/CONTRACT.md, "Tables").
-     *
-     * @var Closure(mixed): mixed|null
      */
     protected ?Closure $stateResolver = null;
+
+    /**
+     * Inline-editable column (slice: editable columns). When true, the client
+     * renders an inline control (checkbox/switch/select/text input) that
+     * writes the column through the typed record-column update endpoint — a
+     * stateless request/response, not a Livewire component. The column ships
+     * `editable: true` on its definition; the value change is validated and
+     * persisted server-side per request.
+     */
+    protected bool $isEditable = false;
+
+    /** Optional per-record authorization for inline edits (never serialized). */
+    protected ?Closure $editAuthorizer = null;
+
+    /** Optional custom persistence handler for inline edits (never serialized). */
+    protected ?Closure $stateUpdater = null;
+
+    /** @var array<int, string> server-side validation rules for the edited value */
+    protected array $editRules = [];
 
     /**
      * Server-side value formatter (Slice 2.1). Receives the resolved state
      * and the record; returns the display value (usually a string). Never
      * serialized — evaluated on every row.
-     *
-     * @var Closure(mixed, mixed): mixed|null
      */
     protected ?Closure $formatUsing = null;
 
@@ -71,21 +112,12 @@ class Column
 
     protected string $suffix = '';
 
-    /** @var string|array<int|string, string|Closure>|Closure|null */
-    protected mixed $color = null;
-
     protected bool $isBadge = false;
 
     /** @var string|Closure|null */
     protected mixed $url = null;
 
     protected bool $openUrlInNewTab = false;
-
-    /** @var string|Closure|null */
-    protected mixed $icon = null;
-
-    /** @var string|Closure|null */
-    protected mixed $iconColor = null;
 
     /** @var array<int, Summarizer> */
     protected array $summarizers = [];
@@ -115,13 +147,6 @@ class Column
     public function translateLabel(bool $condition = true): static
     {
         $this->shouldTranslateLabel = $condition;
-
-        return $this;
-    }
-
-    public function placeholder(?string $placeholder): static
-    {
-        $this->placeholder = $placeholder;
 
         return $this;
     }
@@ -170,8 +195,6 @@ class Column
      * `fn (Post $record): ?string => $record->user?->name`. The closure
      * never survives serialization; the table resolver rebuilds it when rows
      * are served.
-     *
-     * @param  Closure(mixed $record): mixed  $resolver
      */
     public function getStateUsing(Closure $resolver): static
     {
@@ -186,8 +209,6 @@ class Column
      * the value displayed in the cell (usually a string). It never survives
      * serialization — it is evaluated on every row when rows are served.
      * Mirrors Filament's formatStateUsing().
-     *
-     * @param  Closure(mixed $state, mixed $record): mixed  $formatter
      */
     public function formatStateUsing(Closure $formatter): static
     {
@@ -335,20 +356,6 @@ class Column
     }
 
     /**
-     * Color the value (text or badge). Accepts a static name, an array map,
-     * or a per-record closure resolving the color from the state — the common
-     * `->badge()->color(fn ($state) => ...)` idiom.
-     *
-     * @param  string|array<int|string, string|Closure>|Closure  $color
-     */
-    public function color(string|array|Closure $color): static
-    {
-        $this->color = $color;
-
-        return $this;
-    }
-
-    /**
      * A state → color mapping: keys are the color for that exact state value,
      * with an optional catch-all numeric key as the default. Mirrors
      * Filament's colors().
@@ -443,25 +450,96 @@ class Column
     }
 
     /**
-     * Render an icon beside the value. Accepts a static icon key or a
-     * per-record closure resolving to an icon key.
+     * Mark the column as inline-editable: the client renders a control that
+     * writes the column through the typed record-column update endpoint.
      */
-    public function icon(string|Closure $icon): static
+    public function editable(bool $condition = true): static
     {
-        $this->icon = $icon;
+        $this->isEditable = $condition;
+
+        return $this;
+    }
+
+    public function isEditable(): bool
+    {
+        return $this->isEditable;
+    }
+
+    /**
+     * Optional per-record authorization for inline edits. The closure receives
+     * the record; returning false refuses the write even when the client sends
+     * it. Never serialized — evaluated server-side per request.
+     */
+    public function canEdit(Closure $authorizer): static
+    {
+        $this->editAuthorizer = $authorizer;
+
+        return $this;
+    }
+
+    public function isAuthorizedFor(mixed $record): bool
+    {
+        if ($this->editAuthorizer === null) {
+            return true;
+        }
+
+        return (bool) $this->evaluate(
+            $this->editAuthorizer,
+            ['record' => $record],
+            $this->recordTypeInjections($record),
+        );
+    }
+
+    /**
+     * Custom persistence handler for an inline edit. The closure receives the
+     * record and the new value; when absent the column mass-assigns the value
+     * to its named attribute. Never serialized — evaluated server-side.
+     */
+    public function updateStateUsing(Closure $updater): static
+    {
+        $this->stateUpdater = $updater;
 
         return $this;
     }
 
     /**
-     * Color the icon (independent of the value color). Accepts a static name
-     * or a per-record closure.
+     * Server-side validation rules for the edited value (Laravel rules —
+     * pipe strings or arrays). Enforced by the update endpoint before the
+     * value is persisted.
+     *
+     * @param  array<int, string>|string  $rules
      */
-    public function iconColor(string|Closure $iconColor): static
+    public function rules(array|string $rules): static
     {
-        $this->iconColor = $iconColor;
+        $this->editRules = array_values(is_string($rules) ? explode('|', $rules) : $rules);
 
         return $this;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function getEditRules(): array
+    {
+        return $this->editRules;
+    }
+
+    /**
+     * Persist an inline-edited value to the record.
+     */
+    public function updateState(mixed $record, mixed $value): void
+    {
+        if ($this->stateUpdater !== null) {
+            $this->evaluate(
+                $this->stateUpdater,
+                ['record' => $record, 'state' => $value],
+                $this->recordTypeInjections($record),
+            );
+
+            return;
+        }
+
+        $record->update([(string) $this->name => $value]);
     }
 
     public function getName(): ?string
@@ -491,11 +569,6 @@ class Column
         $segment = str_contains($name, '.') ? Str::afterLast($name, '.') : $name;
 
         return Str::headline($segment);
-    }
-
-    public function getPlaceholder(): ?string
-    {
-        return $this->placeholder;
     }
 
     public function isSortable(): bool
@@ -540,7 +613,13 @@ class Column
     {
         $state = $this->resolveRawState($record);
 
-        $state = $this->formatUsing !== null ? ($this->formatUsing)($state, $record) : $state;
+        $state = $this->formatUsing !== null
+            ? $this->evaluate(
+                $this->formatUsing,
+                ['state' => $state, 'record' => $record],
+                $this->recordTypeInjections($record),
+            )
+            : $state;
 
         if ($this->prefix !== '') {
             $state = $this->prefix.(string) ($state ?? '');
@@ -565,8 +644,10 @@ class Column
             'label' => $this->getLabel(),
         ];
 
-        if ($this->placeholder !== null) {
-            $payload['placeholder'] = $this->placeholder;
+        $placeholder = $this->getPlaceholder();
+
+        if ($placeholder !== null) {
+            $payload['placeholder'] = $placeholder;
         }
 
         if ($this->isSortable()) {
@@ -600,6 +681,65 @@ class Column
             if ($this->openUrlInNewTab) {
                 $payload['openUrlInNewTab'] = true;
             }
+        }
+
+        if ($this->isEditable()) {
+            $payload['editable'] = true;
+        }
+
+        // Presentation options (Slice — column presentation). Each getter
+        // resolves through EvaluatesClosures, so a closure config yields its
+        // value here (no state injection for these — they are column-level).
+        $tooltip = $this->getTooltip();
+
+        if ($tooltip !== null) {
+            $payload['tooltip'] = $tooltip;
+        }
+
+        $alignment = $this->getAlignment();
+
+        if ($alignment !== null) {
+            $payload['alignment'] = $alignment instanceof BackedEnum ? $alignment->value : $alignment;
+        }
+
+        $width = $this->getWidth();
+
+        if ($width !== null) {
+            $payload['width'] = $width;
+        }
+
+        $weight = $this->getWeight();
+
+        if ($weight !== null) {
+            $payload['weight'] = $weight instanceof BackedEnum ? $weight->value : $weight;
+        }
+
+        $fontFamily = $this->getFontFamily();
+
+        if ($fontFamily !== null) {
+            $payload['fontFamily'] = $fontFamily instanceof BackedEnum ? $fontFamily->value : $fontFamily;
+        }
+
+        $lineClamp = $this->getLineClamp();
+
+        if ($lineClamp !== null) {
+            $payload['lineClamp'] = $lineClamp;
+        }
+
+        if ($this->hasIconPosition()) {
+            $payload['iconPosition'] = $this->getIconPosition()->value;
+        }
+
+        $iconSize = $this->getIconSize();
+
+        if ($iconSize !== null) {
+            $payload['iconSize'] = $iconSize instanceof BackedEnum ? $iconSize->value : $iconSize;
+        }
+
+        $extraAttributes = $this->getExtraAttributes();
+
+        if ($extraAttributes !== []) {
+            $payload['extraAttributes'] = $extraAttributes;
         }
 
         return $payload;
@@ -659,7 +799,11 @@ class Column
     private function resolveRawState(mixed $record): mixed
     {
         if ($this->stateResolver !== null) {
-            return ($this->stateResolver)($record);
+            return $this->evaluate(
+                $this->stateResolver,
+                ['record' => $record],
+                $this->recordTypeInjections($record),
+            );
         }
 
         if ($this->name === null) {
@@ -671,12 +815,15 @@ class Column
             : $record->getAttribute($this->name);
     }
 
-    private function resolveColorFor(mixed $record): ?string
+    protected function resolveColorFor(mixed $record): ?string
     {
+        // Evaluated through a local so the closure's result type stays open
+        // (mixed) — a per-record color closure may legitimately resolve to
+        // false or a BackedEnum, and the guards below handle those.
         $color = $this->color;
 
         if ($color instanceof Closure) {
-            $color = ($color)($this->resolveRawState($record));
+            $color = $this->evaluate($color, ['state' => $this->resolveRawState($record)]);
         }
 
         if ($color === null || $color === false) {
@@ -697,13 +844,13 @@ class Column
         return $color instanceof BackedEnum ? (string) $color->value : (string) $color;
     }
 
-    private function resolveIconFor(mixed $record): ?string
+    protected function resolveIconFor(mixed $record): ?string
     {
-        $icon = $this->icon;
-
-        if ($icon instanceof Closure) {
-            $icon = ($icon)($record);
-        }
+        $icon = $this->evaluate(
+            $this->icon,
+            ['record' => $record, 'state' => $this->resolveRawState($record)],
+            $this->recordTypeInjections($record),
+        );
 
         if ($icon === null || $icon === false || $icon === '') {
             return null;
@@ -712,12 +859,12 @@ class Column
         return $icon instanceof BackedEnum ? (string) $icon->value : (string) $icon;
     }
 
-    private function resolveIconColorFor(mixed $record): ?string
+    protected function resolveIconColorFor(mixed $record): ?string
     {
         $color = $this->iconColor;
 
         if ($color instanceof Closure) {
-            $color = ($color)($record);
+            $color = $this->evaluate($color, ['record' => $record], $this->recordTypeInjections($record));
         }
 
         if ($color === null || $color === false) {
@@ -729,11 +876,11 @@ class Column
 
     private function resolveUrlFor(mixed $record): ?string
     {
-        $url = $this->url;
-
-        if ($url instanceof Closure) {
-            $url = ($url)($record);
-        }
+        $url = $this->evaluate(
+            $this->url,
+            ['record' => $record],
+            $this->recordTypeInjections($record),
+        );
 
         return ($url === null || $url === '') ? null : (string) $url;
     }

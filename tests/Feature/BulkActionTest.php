@@ -24,6 +24,9 @@ it('serializes the toolbar actions in the definition', function () {
             'label' => 'Delete selected',
             'color' => 'danger',
             'requiresConfirmation' => true,
+            'icon' => 'trash',
+            'modalHeading' => 'Delete selected records',
+            'modalDescription' => 'The selected records will be permanently removed. This action cannot be undone.',
         ],
         [
             'name' => 'restore',
@@ -63,7 +66,9 @@ it('runs a bulk action against the selected records', function () {
     $response = $this->postJson('/refilament/table/posts/bulk/delete', ['records' => $keys]);
 
     $response->assertOk();
-    $response->assertJson(['success' => true, 'message' => 'Selected posts deleted.']);
+    // The workbench's DeleteBulkAction declares a successNotification whose
+    // body wins over the default message — only `success` rides without it.
+    $response->assertJson(['success' => true]);
 
     foreach ($posts as $post) {
         expect(Post::find($post->id))->toBeNull();

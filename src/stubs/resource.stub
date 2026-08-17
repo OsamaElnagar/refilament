@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace {{ namespace }};
 
+use {{ pagesNamespace }}\Create{{ name }};
+use {{ pagesNamespace }}\Edit{{ name }};
+use {{ pagesNamespace }}\List{{ name }};
+use {{ pagesNamespace }}\View{{ name }};
+use {{ schemaFqn }};{{ infolistImport }}
+use {{ tableFqn }};
+use Refilament\Refilament\Resources\Pages\PageRegistration;
 use Refilament\Refilament\Resources\Resource;
 use Refilament\Refilament\Schemas\Schema;
 use Refilament\Refilament\Tables\Table;
-use {{ schemaFqn }};
-use {{ tableFqn }};
 use {{ modelImport }};
 
 class {{ class }} extends Resource
@@ -23,6 +28,13 @@ class {{ class }} extends Resource
     // Override to change the ids the typed endpoints serve this resource under:
     // protected static ?string $tableId = 'posts';
     // protected static ?string $formId = 'post-form';
+
+    /**
+     * The attribute whose value titles each record (used in breadcrumbs,
+     * edit/view URLs and the navigation badge). Auto-detected from a
+     * title/name column by the generator; override as needed.
+     */
+    protected static ?string $recordTitleAttribute = {{ recordTitle }};
 
     /**
      * The table definition — delegated to the standalone class so the same
@@ -40,5 +52,26 @@ class {{ class }} extends Resource
     public static function form(Schema $schema): Schema
     {
         return {{ schemaShort }}::configure($schema);
+    }{{ infolistMethod }}
+
+    /**
+     * The page map (docs/ROADMAP.md "1.6 Page system") — the built-in
+     * list/create/edit/view pages generated under Pages/ (docs/ROADMAP.md
+     * "1.10 Pages/ subdirectory"). Each is a thin class over the built-in
+     * page, declaring its resource; the list page carries the default
+     * CreateAction header action. Override to add custom pages:
+     *
+     *     'stats' => StatsPage::route('/stats'),
+     *
+     * @return array<string, PageRegistration>
+     */
+    public static function getPages(): array
+    {
+        return [
+            'index' => List{{ name }}::route('/'),
+            'create' => Create{{ name }}::route('/create'),
+            'edit' => Edit{{ name }}::route('/{record}/edit'),
+            'view' => View{{ name }}::route('/{record}'),
+        ];
     }
 }

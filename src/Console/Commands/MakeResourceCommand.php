@@ -6,21 +6,66 @@ namespace Refilament\Refilament\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Symfony\Component\Console\Input\InputArgument;
+use Symfony\Component\Console\Input\InputOption;
 
 class MakeResourceCommand extends Command
 {
     /**
-     * The command signature.
+     * The form field classes referenced by the generated form body, keyed by
+     * FQCN - used to emit only the `use` statements the body actually needs.
+     *
+     * @var array<string, true>
      */
-    protected $signature = 'refilament:make-resource {name} {--model=} {--generate} {--force}';
+    protected array $usedFormFields = [];
+
+    /**
+     * The table column classes referenced by the generated table body, keyed
+     * by class name - used to emit only the `use` statements the body needs.
+     *
+     * @var array<string, true>
+     */
+    protected array $usedTableColumns = [];
+
+    /**
+     * The command name and signature.
+     */
+    protected $name = 'refilament:make-resource';
 
     /**
      * The command description.
      */
-    protected $description = 'Create a new Refilament resource class and its table/form classes';
+    protected $description = 'Create a new Refilament resource class and its table/form/infolist classes';
+
+    /**
+     * @return array<int, array{0: string, 1: int, 2: string}>
+     */
+    protected function getArguments(): array
+    {
+        return [
+            ['name', InputArgument::REQUIRED, 'The name of the resource (e.g. "Post" or "posts").'],
+        ];
+    }
+
+    /**
+     * @return array<int, array{0: string, 1: string|null, 2: int, 3: string}>
+     */
+    protected function getOptions(): array
+    {
+        return [
+            ['generate', 'G', InputOption::VALUE_NONE, 'Generate columns and fields from the model table.'],
+            ['force', 'F', InputOption::VALUE_NONE, 'Overwrite any existing files.'],
+            ['model', null, InputOption::VALUE_REQUIRED, 'The fully-qualified model class to base the resource on.'],
+            ['model-namespace', null, InputOption::VALUE_REQUIRED, 'The namespace to look for the model in when --model is omitted (default: App\\Models).'],
+            ['view', null, InputOption::VALUE_NONE, 'Generate a tailored read-only infolist schema for the view page.'],
+            ['soft-deletes', null, InputOption::VALUE_NONE, 'Generate a trashed-records filter (auto-detected from the model\'s SoftDeletes trait).'],
+            ['record-title-attribute', null, InputOption::VALUE_REQUIRED, 'The attribute used to title records (auto-detected from a title/name column).'],
+        ];
+    }
 
     /**
      * Execute the console command.
@@ -30,8 +75,9 @@ class MakeResourceCommand extends Command
         $name = Str::studly($this->argument('name'));
         $className = $name.'Resource';
 
+        $modelNamespace = (string) ($this->option('model-namespace') ?? 'App\\Models');
         /** @var class-string<Model> $model */
-        $model = $this->option('model') ?? 'App\\Models\\'.$name;
+        $model = $this->option('model') ?? $modelNamespace.'\\'.$name;
 
         $resourcesPath = (string) config('refilament.resources.path', app_path('Refilament/Resources'));
         $resourcesNamespace = (string) config('refilament.resources.namespace', 'App\\Refilament\\Resources');
@@ -47,13 +93,10 @@ class MakeResourceCommand extends Command
         $resourceFile = $basePath.'/'.$className.'.php';
         $schemaDir = $basePath.'/Schemas';
         $tableDir = $basePath.'/Tables';
+        $pagesDir = $basePath.'/Pages';
         $schemaFile = $schemaDir.'/'.$name.'Form.php';
         $tableFile = $tableDir.'/'.$plural.'Table.php';
-
-        // The resolved ids for the generated classes — the resource's derived
-        // defaults unless a resource of the same id is already registered.
-        $tableId = Str::kebab($name);
-        $formId = $tableId.'-form';
+        $infolistFile = $schemaDir.'/'.$name.'Infolist.php';
 
         if (! class_exists($model)) {
             $this->components->error("Model [{$model}] does not exist.");
@@ -61,7 +104,33 @@ class MakeResourceCommand extends Command
             return self::FAILURE;
         }
 
-        foreach ([$resourceFile, $schemaFile, $tableFile] as $file) {
+        $generateView = (bool) $this->option('view');
+        $usesSoftDeletes = (bool) $this->option('soft-deletes') || $this->modelUsesSoftDeletes($model);
+        $recordTitleAttribute = $this->option('record-title-attribute') ?? $this->detectRecordTitleAttribute($model);
+
+        // The generated Pages/ classes (slice 1.10 — docs/ROADMAP.md "1.10
+        // Pages/ subdirectory"): one thin class per built-in page, mirroring
+        // Filament's per-resource Pages/ layout. The list page carries the
+        // default CreateAction header action.
+        $pageFiles = [
+            'List'.$name.'.php' => $pagesDir.'/List'.$name.'.php',
+            'Create'.$name.'.php' => $pagesDir.'/Create'.$name.'.php',
+            'Edit'.$name.'.php' => $pagesDir.'/Edit'.$name.'.php',
+            'View'.$name.'.php' => $pagesDir.'/View'.$name.'.php',
+        ];
+        $resourceFqn = $baseNamespace.'\\'.$className;
+        $pagesNamespace = $baseNamespace.'\\Pages';
+
+        // The resolved ids for the generated classes — the resource's derived
+        // defaults unless a resource of the same id is already registered.
+        $tableId = Str::kebab($name);
+        $formId = $tableId.'-form';
+
+        $files = $generateView
+            ? [$resourceFile, $schemaFile, $infolistFile, $tableFile, ...array_values($pageFiles)]
+            : [$resourceFile, $schemaFile, $tableFile, ...array_values($pageFiles)];
+
+        foreach ($files as $file) {
             if ($filesystem->exists($file) && ! $this->option('force')) {
                 $this->components->error("{$file} already exists.");
 
@@ -69,67 +138,140 @@ class MakeResourceCommand extends Command
             }
         }
 
-        [$tableBody, $formBody] = $this->option('generate')
-            ? $this->generateBodies($model)
-            : [self::tablePlaceholder(), self::formPlaceholder()];
+        if ($this->option('generate')) {
+            [$tableBody, $formBody, $infolistBody] = $this->generateBodies($model);
+        } else {
+            $tableBody = self::tablePlaceholder();
+            $formBody = self::formPlaceholder();
+            $infolistBody = self::infolistPlaceholder();
+        }
+
+        $fieldImports = $this->renderFieldImports();
+        $toggleColumnImport = isset($this->usedTableColumns['ToggleColumn']) ? "\nuse Refilament\\Refilament\\Tables\\ToggleColumn;" : '';
 
         // The stubs embed the bodies one level past the `->columns([` /
         // `->components([` chain lines (12 spaces + 4) — indent every line
         // so the generated files are pint-clean out of the box.
         $tableBody = $this->indent($tableBody, 16);
         $formBody = $this->indent($formBody, 16);
+        $infolistBody = $this->indent($infolistBody, 16);
 
         $filesystem->ensureDirectoryExists($schemaDir);
         $filesystem->ensureDirectoryExists($tableDir);
+        $filesystem->ensureDirectoryExists($pagesDir);
 
         $resourceStub = $filesystem->get(__DIR__.'/../../stubs/resource.stub');
         $schemaStub = $filesystem->get(__DIR__.'/../../stubs/schema.stub');
         $tableStub = $filesystem->get(__DIR__.'/../../stubs/table.stub');
+        $infolistStub = $filesystem->get(__DIR__.'/../../stubs/infolist.stub');
+        $resourcePageStub = $filesystem->get(__DIR__.'/../../stubs/resource-page.stub');
+        $resourceListPageStub = $filesystem->get(__DIR__.'/../../stubs/resource-list-page.stub');
+
+        $infolistFqn = $baseNamespace.'\\Schemas\\'.$name.'Infolist';
 
         $filesystem->put($resourceFile, str_replace(
             [
                 '{{ namespace }}', '{{ class }}',
-                '{{ schemaFqn }}', '{{ tableFqn }}',
-                '{{ schemaShort }}', '{{ tableShort }}',
-                '{{ modelImport }}', '{{ modelShort }}',
+                '{{ schemaFqn }}', '{{ tableFqn }}', '{{ infolistImport }}',
+                '{{ schemaShort }}', '{{ tableShort }}', '{{ infolistMethod }}',
+                '{{ modelImport }}', '{{ modelShort }}', '{{ recordTitle }}',
+                '{{ pagesNamespace }}', '{{ name }}',
             ],
             [
                 $baseNamespace, $className,
                 "{$baseNamespace}\\Schemas\\{$name}Form", "{$baseNamespace}\\Tables\\{$plural}Table",
+                $generateView ? "\nuse {$infolistFqn};" : '',
                 "{$name}Form", "{$plural}Table",
+                $generateView ? "\n\n    /**\n     * The read-only infolist shown on the record view page (generated with\n     * --view) - delegated to the standalone class so the read-out can be\n     * reused elsewhere.\n     */\n    public static function infolist(Schema \$schema): Schema\n    {\n        return {$name}Infolist::configure(\$schema);\n    }" : '',
                 $model, Str::afterLast($model, '\\'),
+                $recordTitleAttribute !== null ? "'{$recordTitleAttribute}'" : 'null',
+                $pagesNamespace, $name,
             ],
             $resourceStub,
         ));
 
+        // One thin page class per built-in page, extending the framework's
+        // page and declaring its resource — the list page additionally ships
+        // the default CreateAction header action (slice 1.10).
+        $pageVariables = [
+            '{{ namespace }}' => $pagesNamespace,
+            '{{ resourceFqn }}' => $resourceFqn,
+            '{{ resourceShort }}' => $className,
+        ];
+
+        foreach (['List', 'Create', 'Edit', 'View'] as $pageName) {
+            $stub = $pageName === 'List' ? $resourceListPageStub : $resourcePageStub;
+            $extends = [
+                'List' => 'ListRecords',
+                'Create' => 'CreateRecord',
+                'Edit' => 'EditRecord',
+                'View' => 'ViewRecord',
+            ][$pageName];
+
+            $filesystem->put(
+                $pageFiles[$pageName.$name.'.php'],
+                str_replace(
+                    [...array_keys($pageVariables), '{{ class }}', '{{ extends }}'],
+                    [...array_values($pageVariables), $pageName.$name, $extends],
+                    $stub,
+                ),
+            );
+        }
+
         $filesystem->put($schemaFile, str_replace(
-            ['{{ namespace }}', '{{ class }}', '{{ formId }}', '{{ body }}'],
-            ["{$baseNamespace}\\Schemas", "{$name}Form", $formId, $formBody],
+            ['{{ namespace }}', '{{ class }}', '{{ formId }}', '{{ body }}', '{{ fieldImports }}'],
+            ["{$baseNamespace}\\Schemas", "{$name}Form", $formId, $formBody, $fieldImports],
             $schemaStub,
         ));
 
+        if ($generateView) {
+            $filesystem->put($infolistFile, str_replace(
+                ['{{ namespace }}', '{{ class }}', '{{ body }}'],
+                ["{$baseNamespace}\\Schemas", $name.'Infolist', $infolistBody],
+                $infolistStub,
+            ));
+        }
+
         $filesystem->put($tableFile, str_replace(
-            ['{{ namespace }}', '{{ class }}', '{{ tableId }}', '{{ body }}', '{{ modelImport }}', '{{ modelShort }}'],
-            ["{$baseNamespace}\\Tables", "{$plural}Table", $tableId, $tableBody, $model, Str::afterLast($model, '\\')],
+            [
+                '{{ namespace }}', '{{ class }}', '{{ tableId }}', '{{ body }}',
+                '{{ modelImport }}', '{{ modelShort }}', '{{ toggleColumnImport }}', '{{ filtersImport }}', '{{ filtersBody }}',
+            ],
+            [
+                "{$baseNamespace}\\Tables", "{$plural}Table", $tableId, $tableBody,
+                $model, Str::afterLast($model, '\\'),
+                $toggleColumnImport,
+                $usesSoftDeletes ? "\nuse Refilament\\Refilament\\Tables\\TrashedFilter;" : '',
+                $usesSoftDeletes ? "\n            ->filters([TrashedFilter::make()])" : '',
+            ],
             $tableStub,
         ));
 
-        $this->components->info("{$className} created at {$resourceFile}.");
+        $this->components->info("{$className} created at {$resourceFile} with Pages/List{$name}, Create{$name}, Edit{$name} and View{$name}.");
 
         if ($this->option('generate')) {
-            $this->components->info('Generated columns and fields from the model table — customize the generated files before shipping.');
+            $this->components->info('Generated columns, fields and entries from the model table — customize the generated files before shipping.');
         } else {
-            $this->components->info('Define columns and fields in the generated table() and form() classes.');
+            $this->components->info('Define columns, fields and entries in the generated table(), form() and infolist() classes.');
+        }
+
+        if ($usesSoftDeletes) {
+            $this->components->info('The model uses soft deletes — added a trashed-records filter to the table.');
+        }
+
+        if ($generateView) {
+            $this->components->info("Generated the read-only {$name}Infolist schema and wired it into infolist().");
         }
 
         return self::SUCCESS;
     }
 
     /**
-     * Build the table columns and form fields from the model's table columns.
+     * Build the table columns, form fields and infolist entries from the
+     * model's table columns.
      *
      * @param  class-string<Model>  $model
-     * @return array{0: string, 1: string}
+     * @return array{0: string, 1: string, 2: string}
      */
     protected function generateBodies(string $model): array
     {
@@ -138,6 +280,7 @@ class MakeResourceCommand extends Command
 
         $tableColumns = [];
         $formFields = [];
+        $infolistEntries = [];
 
         foreach ($columns as $column) {
             $name = (string) $column['name'];
@@ -147,6 +290,7 @@ class MakeResourceCommand extends Command
 
             if ($name === 'id') {
                 $tableColumns[] = "Column::make('id')->label('ID')->sortable(),";
+                $infolistEntries[] = "TextEntry::make('id')->label('ID'),";
 
                 continue;
             }
@@ -155,32 +299,51 @@ class MakeResourceCommand extends Command
                 continue;
             }
 
+            if ($this->isBooleanType($type)) {
+                $tableColumns[] = "ToggleColumn::make('{$name}')->label('{$label}'),";
+                $this->usedTableColumns['ToggleColumn'] = true;
+                $formFields[] = $this->trackField('Toggle', $name, $label, $nullable).',';
+                $infolistEntries[] = "TextEntry::make('{$name}')->label('{$label}'),";
+
+                continue;
+            }
+
             if ($this->isIntegerType($type)) {
                 $tableColumns[] = "Column::make('{$name}')->label('{$label}'),";
-                $formFields[] = "TextInput::make('{$name}')->label('{$label}')".($nullable ? '' : '->required()').'->integer(),';
+                $formFields[] = $this->trackField('TextInput', $name, $label, $nullable).'->integer(),';
+                $infolistEntries[] = "TextEntry::make('{$name}')->label('{$label}')->numeric(),";
 
                 continue;
             }
 
             if ($this->isTemporalType($type)) {
                 $tableColumns[] = "Column::make('{$name}')->label('{$label}')->sortable(),";
+                $formFields[] = $this->trackField($this->temporalField($type), $name, $label, $nullable).',';
+                $infolistEntries[] = "TextEntry::make('{$name}')->label('{$label}'),";
 
                 continue;
             }
 
-            // Strings, text and anything else land as a text input (a textarea
-            // component is deferred). Password-named columns become masked,
-            // revealable password inputs.
+            if ($this->isTextType($type)) {
+                $tableColumns[] = "Column::make('{$name}')->label('{$label}'),";
+                $formFields[] = $this->trackField('Textarea', $name, $label, $nullable).',';
+                $infolistEntries[] = "TextEntry::make('{$name}')->label('{$label}'),";
+
+                continue;
+            }
+
+            // Strings and anything else land as a text input. Password-named
+            // columns become masked, revealable password inputs.
             $length = isset($column['length']) && is_numeric($column['length'])
                 ? (int) $column['length']
                 : null;
 
             $tableColumns[] = "Column::make('{$name}')->label('{$label}'),";
-            $formFields[] = "TextInput::make('{$name}')->label('{$label}')"
-                .($nullable ? '' : '->required()')
+            $formFields[] = $this->trackField('TextInput', $name, $label, $nullable)
                 .($this->isPasswordColumn($name) ? '->password()->revealable()' : '')
                 .($length !== null ? "->maxLength({$length})" : '')
                 .',';
+            $infolistEntries[] = "TextEntry::make('{$name}')->label('{$label}'),";
         }
 
         if ($tableColumns === []) {
@@ -191,7 +354,11 @@ class MakeResourceCommand extends Command
             $formFields[] = self::formPlaceholder();
         }
 
-        return [implode("\n", $tableColumns), implode("\n", $formFields)];
+        if ($infolistEntries === []) {
+            $infolistEntries[] = self::infolistPlaceholder();
+        }
+
+        return [implode("\n", $tableColumns), implode("\n", $formFields), implode("\n", $infolistEntries)];
     }
 
     protected static function tablePlaceholder(): string
@@ -202,6 +369,41 @@ class MakeResourceCommand extends Command
     protected static function formPlaceholder(): string
     {
         return '// TODO: define fields — e.g.';
+    }
+
+    protected static function infolistPlaceholder(): string
+    {
+        return '// TODO: define entries — e.g.';
+    }
+
+    /**
+     * Record a used form field class and return the field's opening call, so
+     * the schema stub only imports what the body references.
+     */
+    protected function trackField(string $field, string $name, string $label, bool $nullable): string
+    {
+        $this->usedFormFields["Refilament\\Refilament\\Schemas\\Components\\{$field}"] = true;
+
+        return "{$field}::make('{$name}')->label('{$label}')".($nullable ? '' : '->required()');
+    }
+
+    /**
+     * Render the `use` statements the generated form body needs, alphabetized
+     * ahead of the Schema import for pint-clean output.
+     */
+    protected function renderFieldImports(): string
+    {
+        $fqns = array_keys($this->usedFormFields);
+        natcasesort($fqns);
+
+        if ($fqns === []) {
+            return '';
+        }
+
+        return implode('', array_map(
+            static fn (string $fqn): string => "use {$fqn};\n",
+            $fqns,
+        ));
     }
 
     /**
@@ -216,6 +418,36 @@ class MakeResourceCommand extends Command
             static fn (string $line): string => $line === '' ? '' : $padding.$line,
             explode("\n", $body),
         ));
+    }
+
+    /**
+     * The first title/name-style column in the model's table, used as the
+     * resource's record title attribute — mirrors Filament's choice of a
+     * human-friendly display attribute for breadcrumbs and URLs.
+     *
+     * @param  class-string<Model>  $model
+     */
+    protected function detectRecordTitleAttribute(string $model): ?string
+    {
+        $names = array_column(Schema::getColumns((new $model)->getTable()), 'name');
+
+        foreach (['title', 'name'] as $candidate) {
+            if (in_array($candidate, $names, true)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Whether the model uses the SoftDeletes trait.
+     *
+     * @param  class-string<Model>  $model
+     */
+    protected function modelUsesSoftDeletes(string $model): bool
+    {
+        return in_array(SoftDeletes::class, class_uses_recursive($model), true);
     }
 
     /**
@@ -238,6 +470,11 @@ class MakeResourceCommand extends Command
         return in_array($name, ['password', 'password_confirmation', 'current_password'], true);
     }
 
+    protected function isBooleanType(string $type): bool
+    {
+        return str_contains($type, 'bool') || str_contains($type, 'tinyint');
+    }
+
     protected function isIntegerType(string $type): bool
     {
         return str_contains($type, 'int');
@@ -246,5 +483,22 @@ class MakeResourceCommand extends Command
     protected function isTemporalType(string $type): bool
     {
         return str_contains($type, 'time') || str_contains($type, 'date');
+    }
+
+    protected function isTextType(string $type): bool
+    {
+        return str_contains($type, 'text');
+    }
+
+    /**
+     * The field class that best matches a temporal column type.
+     */
+    protected function temporalField(string $type): string
+    {
+        if (str_contains($type, 'timestamp') || str_contains($type, 'datetime')) {
+            return 'DateTimePicker';
+        }
+
+        return str_contains($type, 'time') ? 'TimePicker' : 'DatePicker';
     }
 }

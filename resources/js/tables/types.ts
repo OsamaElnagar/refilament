@@ -2,7 +2,66 @@
  * TypeScript mirror of the table payload contract (docs/CONTRACT.md, "Tables").
  */
 
-export interface TableColumn {
+/** Column-level presentation options (resolved server-side at definition
+ * time). Shared by table columns and infolist entry nodes, which both feed the
+ * table `Cell` renderer. */
+export interface TableCellPresentation {
+    tooltip?: string;
+    alignment?: string;
+    width?: string;
+    weight?: string;
+    fontFamily?: string;
+    lineClamp?: number;
+    iconPosition?: 'before' | 'after';
+    iconSize?: string;
+    extraAttributes?: Record<string, string>;
+    /** Renderer kind for specialized columns ('tags' | 'image' | 'color'). */
+    kind?: string;
+    /** Image/tags column: cap on the number of thumbnails/badges shown. */
+    limit?: number;
+    /** Image column: thumbnail size in px (or a CSS length). */
+    size?: string | number;
+    /** Image column: render circular/square/overlapping thumbnails. */
+    circular?: boolean;
+    square?: boolean;
+    stacked?: boolean;
+    /** Image column: ring width and overlap offset for stacked avatars. */
+    ring?: number;
+    overlap?: number;
+    /** Image column: show the "+N" overflow count once limited. */
+    limitedRemainingText?: boolean;
+    /** Image column: fallback image when the state is blank. */
+    defaultImageUrl?: string;
+    /** Color column: swatches copy their value on click. */
+    copyable?: boolean;
+    /** Inline-editable column (slice: editable columns): the client renders an
+     * inline control (checkbox/switch/select/text input) that writes this
+     * column through the record-column update endpoint. */
+    editable?: boolean;
+    /** Checkbox/toggle column: tint the control's "on" state. */
+    onColor?: string;
+    /** Checkbox column: tint the control's "off" state. */
+    offColor?: string;
+    /** Toggle column: icon shown on the "on" state. */
+    onIcon?: string;
+    /** Toggle column: icon shown on the "off" state. */
+    offIcon?: string;
+    /** Select column: the selectable options (value/label, optional per-option
+     * disabled). Only present on select columns. */
+    options?: Array<{ value: string; label: string; isDisabled?: boolean }>;
+    /** Select column: a placeholder shown when no value is selected. */
+    placeholder?: string;
+    /** Text column: the native input type (e.g. 'text' | 'number' | 'email'). */
+    type?: string;
+    /** Text column: the input's `inputmode` (e.g. 'decimal' | 'numeric'). */
+    inputMode?: 'none' | 'search' | 'text' | 'tel' | 'url' | 'email' | 'numeric' | 'decimal';
+    /** Text column: the input's numeric `step`. */
+    step?: number | string;
+    /** Text column: the input's `maxlength` (also a server-side `max` rule). */
+    maxLength?: number;
+}
+
+export interface TableColumn extends TableCellPresentation {
     name: string;
     label: string;
     placeholder?: string;
@@ -48,6 +107,8 @@ export interface TableSelectFilter extends TableFilterBase {
     options: TableFilterOption[];
     /** Omitted unless the filter accepts several values at once. */
     multiple?: boolean;
+    /** Trigger placeholder, omitted unless configured (falls back to `Select <label>`). */
+    placeholder?: string;
 }
 
 /** Free-text filter — sent as `filter[<name>]=<term>`, matched with LIKE. */
@@ -94,6 +155,21 @@ export interface TableAction {
     schema?: string;
     /** Omitted unless the action asks for confirmation first. */
     requiresConfirmation?: boolean;
+    /** Icon key rendered beside the label (the shared lucide registry). */
+    icon?: string;
+    /** Short hint shown on hover. */
+    tooltip?: string;
+    /** Custom confirmation modal heading — replaces "Confirm {label}". */
+    modalHeading?: string;
+    /** Custom confirmation modal description. */
+    modalDescription?: string;
+    /**
+     * Present on a dropdown group entry: the group's member actions as
+     * `items`. A row's `actions` array may name a group; the renderer shows
+     * it as an overflow menu with the members visible for that record.
+     */
+    group?: boolean;
+    items?: TableAction[];
 }
 
 /**
@@ -107,8 +183,14 @@ export interface TableBulkAction {
     label: string;
     /** Omitted unless configured. */
     color?: TableActionColor;
+    /** Icon key rendered beside the label (the shared lucide registry). */
+    icon?: string;
     /** Omitted unless the action asks for confirmation first. */
     requiresConfirmation?: boolean;
+    /** Custom confirmation modal heading — replaces "Confirm {label}". */
+    modalHeading?: string;
+    /** Custom confirmation modal description. */
+    modalDescription?: string;
 }
 
 /**
@@ -135,9 +217,28 @@ export interface TableRow {
     groupKey?: string | number;
     /** The rendered group-header label for this row (slice 2.3). */
     groupTitle?: string;
-    /** Names of the actions visible for this record; omitted when the table
-     * defines no actions. Definitions live on the payload. */
-    actions?: string[];
+    /**
+     * The actions visible for this record; omitted when the table defines no
+     * actions. A flat action is its name; a dropdown group is
+     * `{ name, items: [<member names visible for this record>] }` — the
+     * members are listed explicitly by the server, so the client never
+     * re-derives per-record visibility. Definitions live on the payload.
+     */
+    actions?: Array<string | { name: string; items: string[] }>;
+    /**
+     * The row's click target (record navigation slice) — the record's view
+     * page when the current user can view it, else its edit page, else
+     * absent (row not clickable). Resolved server-side per record.
+     */
+    recordUrl?: string;
+    /**
+     * Per-record navigation URLs for the row's visible actions (record
+     * navigation slice), keyed by action name — present for navigation
+     * actions only (ViewAction, or an action with a closure/static url).
+     * When an action has an entry here, the client navigates instead of
+     * POSTing to the action endpoint.
+     */
+    actionUrls?: Record<string, { url: string; openUrlInNewTab?: boolean }>;
     /** Column cells. Plain columns ship a scalar (string | number | null); a
      * column with display concerns (badge / color / icon / url) ships this
      * structured object so its presentation resolves server-side per record. */
@@ -163,6 +264,14 @@ export interface TableCellDisplay {
     /** Link the cell to a url (resolved server-side per record). */
     url?: string;
     openUrlInNewTab?: boolean;
+    /** Tags column: the state as an array of badge strings. */
+    tags?: string[];
+    /** Image column: the state as an array of image URLs. */
+    images?: string[];
+    /** Color column: the state as an array of CSS color strings. */
+    colors?: string[];
+    /** Tags/image column: how many items were hidden by a limit. */
+    remaining?: number;
 }
 
 export interface TablePayload {
@@ -173,6 +282,13 @@ export interface TablePayload {
     columns: TableColumn[];
     /** Omitted when the table defines no filters. */
     filters?: TableFilter[];
+    /**
+     * Where the filters render (mirrors Filament's FiltersLayout enum):
+     * 'dropdown' (default), 'modal', 'above-content', 'above-content-collapsible',
+     * 'below-content', 'before-content', 'after-content', the collapsible side
+     * variants, or 'hidden'. Omitted when the table defines no filters.
+     */
+    filtersLayout?: string;
     /** Omitted when the table defines no row actions. */
     actions?: TableAction[];
     /** Omitted when the table defines no header actions (e.g. modal create). */

@@ -6,6 +6,7 @@ env:
 
 providers:
   - Inertia\ServiceProvider
+  - Laravel\Fortify\FortifyServiceProvider
   - Refilament\Refilament\RefilamentServiceProvider
   - Workbench\App\Providers\WorkbenchServiceProvider
   - Workbench\App\Providers\RefilamentDefaultsServiceProvider

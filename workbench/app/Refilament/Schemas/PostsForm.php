@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace Workbench\App\Refilament\Schemas;
 
+use Refilament\Refilament\Actions\Action;
 use Refilament\Refilament\Notifications\Notification;
 use Refilament\Refilament\Schemas\Components\Grid;
 use Refilament\Refilament\Schemas\Components\Section;
 use Refilament\Refilament\Schemas\Components\Select;
 use Refilament\Refilament\Schemas\Components\TextInput;
 use Refilament\Refilament\Schemas\Schema;
-use Refilament\Refilament\Tables\Action;
 use Workbench\App\Enums\PostStatus;
 use Workbench\App\Models\Post;
 
@@ -41,7 +41,7 @@ class PostsForm
                                 ->label('Title')
                                 ->placeholder('My post title')
                                 ->helperText('At least 3 characters')
-                                ->validation(['required', 'string', 'min:3', 'max:255'])
+                                ->rules(['required', 'string', 'min:3', 'max:255'])
                                 ->required()
                                 ->maxLength(255)
                                 ->columnSpan(2),
@@ -54,13 +54,13 @@ class PostsForm
                                 // is typed on create but locked on edit — the
                                 // immutable identifier pattern.
                                 ->disabledOn('edit')
-                                ->validation(['required', 'string', 'regex:/^[a-z0-9-]+$/', 'max:255', 'unique:posts,slug'])
+                                ->rules(['required', 'string', 'regex:/^[a-z0-9-]+$/', 'max:255', 'unique:posts,slug'])
                                 ->required(),
 
                             TextInput::make('author')
                                 ->label('Author')
                                 ->placeholder('Ada Lovelace')
-                                ->validation(['required', 'string', 'max:100'])
+                                ->rules(['required', 'string', 'max:100'])
                                 ->required()
                                 // Hint actions (slice C5): a small action in
                                 // the label row, mirroring the Ahram
@@ -102,7 +102,7 @@ class PostsForm
                             // derived from PostStatus's cases — the Ahram
                             // `->options(SomeEnum::class)` idiom.
                             ->options(PostStatus::class)
-                            ->validation(['required', 'in:draft,published,archived'])
+                            ->rules(['required', 'in:draft,published,archived'])
                             ->required()
                             // Hint icon (slice C5): Filament's `hintIcon()` —
                             // a small glyph with a hover tooltip in the

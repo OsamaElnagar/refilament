@@ -3,12 +3,12 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Lang;
+use Refilament\Refilament\Actions\Action;
+use Refilament\Refilament\Actions\BulkAction;
 use Refilament\Refilament\Navigation\NavigationGroup;
 use Refilament\Refilament\Navigation\NavigationItem;
 use Refilament\Refilament\Schemas\Components\Tab;
 use Refilament\Refilament\Schemas\Components\TextInput;
-use Refilament\Refilament\Tables\Action;
-use Refilament\Refilament\Tables\BulkAction;
 use Refilament\Refilament\Tables\Column;
 use Refilament\Refilament\Tables\Group;
 use Refilament\Refilament\Tables\SelectFilter;

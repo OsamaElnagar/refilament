@@ -3,7 +3,19 @@ import { BarChart3, ChevronDown, CircleDashed, Droplet, FileStack, GalleryVertic
 import { useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
-import { ShellSlot } from '@/components/shell/ShellSlots';
+import { SHELL_SLOTS, ShellSlot } from '@/components/shell/ShellSlots';
+import { ICONS } from '@/components/icon';
+
+/** Tailwind badge classes per serialized color, layered onto the outline
+ * variant so the pill stays legible in the sidebar. */
+const NAV_BADGE_COLORS: Record<string, string> = {
+    primary: 'border-primary/30 bg-primary/10 text-primary',
+    secondary: 'border-border/70 bg-muted text-muted-foreground',
+    success: 'border-emerald-600/30 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400',
+    danger: 'border-rose-600/30 bg-rose-600/10 text-rose-700 dark:text-rose-400',
+    warning: 'border-amber-600/30 bg-amber-600/10 text-amber-700 dark:text-amber-400',
+    info: 'border-sky-600/30 bg-sky-600/10 text-sky-700 dark:text-sky-400',
+};
 import {
     Sidebar,
     SidebarContent,
@@ -42,6 +54,15 @@ export interface PanelConfig {
      * with the client polling interval in Filament's '7s' / '150s' style.
      */
     notifications?: { polling?: string };
+    /**
+     * Account-page links for the shell's user menu (slice 1.9 "user menu") —
+     * each present only when the server enabled the feature behind it, so the
+     * menu renders a link exactly when the route exists. The logout URL is
+     * shared whenever any auth page is mounted.
+     */
+    profileUrl?: string;
+    twoFactorUrl?: string;
+    logoutUrl?: string;
     groups: PanelNavGroup[];
     items: PanelNavItem[];
 }
@@ -60,14 +81,23 @@ export interface PanelNavItem {
     url: string;
     icon?: string;
     badge?: string | number;
+    badgeColor?: string;
+    badgeTooltip?: string;
     openInNewTab?: boolean;
+    /**
+     * Sub-navigation (the page-clusters slice) — a cluster's sidebar entry
+     * carries its members as children; the parent renders as a collapsible
+     * node with a chevron.
+     */
+    children?: PanelNavItem[];
 }
 
 /**
  * Resolve a server-side icon string to a Lucide icon. The PHP builder sends
  * an arbitrary string key (usually a Filament-style icon name); map the known
- * ones here and fall back to a neutral glyph so an unknown key never breaks
- * the shell.
+ * ones here, then fall back to the shared cell-icon registry (cell.tsx — the
+ * keys stat icons, table cells and hint actions already use), and finally to
+ * a neutral glyph so an unknown key never breaks the shell.
  */
 export function iconFor(name?: string): LucideIcon {
     switch (name) {
@@ -83,8 +113,14 @@ export function iconFor(name?: string): LucideIcon {
         case 'chart-bar':
             return BarChart3;
         default:
-            return CircleDashed;
+            break;
     }
+
+    if (name && ICONS[name]) {
+        return ICONS[name];
+    }
+
+    return CircleDashed;
 }
 
 export default function PanelSidebar() {
@@ -119,7 +155,12 @@ export default function PanelSidebar() {
                 </SidebarMenu>
             </SidebarHeader>
 
+            <ShellSlot name={SHELL_SLOTS.sidebarLogoAfter} />
+
             <SidebarContent>
+                <ShellSlot name={SHELL_SLOTS.sidebarStart} />
+                <ShellSlot name={SHELL_SLOTS.sidebarNavStart} />
+
                 {panel?.groups.map((group) => (
                     <PanelGroup key={group.label} group={group} currentUrl={url} />
                 ))}
@@ -137,10 +178,12 @@ export default function PanelSidebar() {
                         </SidebarGroupContent>
                     </SidebarGroup>
                 ) : null}
+
+                <ShellSlot name={SHELL_SLOTS.sidebarNavEnd} />
             </SidebarContent>
 
             <SidebarFooter>
-                <ShellSlot name="sidebar-footer" />
+                <ShellSlot name={SHELL_SLOTS.sidebarFooter} />
             </SidebarFooter>
 
             <SidebarRail />
@@ -258,6 +301,14 @@ function PanelItemButton({ item, currentUrl }: { item: PanelNavItem; currentUrl:
             ? currentUrl === item.url || currentUrl === dashboardUrl
             : currentUrl.startsWith(item.url);
 
+    // A cluster entry (page-clusters slice): a collapsible parent node whose
+    // children are the cluster's members. The parent is active when any child
+    // is active; the chevron toggles the sub-navigation, open by default and
+    // staying open while a child is current.
+    if (item.children && item.children.length > 0) {
+        return <PanelClusterItem item={item} currentUrl={currentUrl} />;
+    }
+
     return (
         <SidebarMenuButton
             isActive={active}
@@ -265,9 +316,56 @@ function PanelItemButton({ item, currentUrl }: { item: PanelNavItem; currentUrl:
                 <Link href={item.url} {...(item.openInNewTab ? { target: '_blank', rel: 'noreferrer' } : {})}>
                     {Icon && <Icon className="size-4" />}
                     <span>{item.label}</span>
-                    {item.badge !== undefined ? <Badge className="ml-auto text-xs">{item.badge}</Badge> : null}
+                    {item.badge !== undefined ? (
+                        <Badge
+                            variant="outline"
+                            title={item.badgeTooltip}
+                            className={cn(
+                                'ml-auto text-xs',
+                                item.badgeColor ? (NAV_BADGE_COLORS[item.badgeColor] ?? NAV_BADGE_COLORS.secondary) : '',
+                            )}
+                        >
+                            {item.badge}
+                        </Badge>
+                    ) : null}
                 </Link>
             }
         />
+    );
+}
+
+/**
+ * A cluster's sidebar entry — a collapsible parent (label + icon + chevron)
+ * with its members as nested sub-navigation. Open by default; while a member
+ * is current the group stays open.
+ */
+function PanelClusterItem({ item, currentUrl }: { item: PanelNavItem; currentUrl: string }) {
+    const Icon = iconFor(item.icon);
+    const childActive = (item.children ?? []).some((child) => currentUrl.startsWith(child.url));
+    const [open, setOpen] = useState(() => childActive);
+    const isOpen = open || childActive;
+
+    return (
+        <SidebarMenuItem>
+            <button
+                type="button"
+                onClick={() => setOpen((value) => !value)}
+                aria-expanded={isOpen}
+                className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-sidebar-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            >
+                <span className="flex min-w-0 items-center gap-2">
+                    {Icon && <Icon className="size-4" />}
+                    <span className="truncate">{item.label}</span>
+                </span>
+                <ChevronDown className={cn('size-3 shrink-0 transition-transform', isOpen ? 'rotate-180' : '')} />
+            </button>
+            {isOpen ? (
+                <div className="mt-0.5 space-y-0.5 border-l border-border pl-3 ml-3">
+                    {(item.children ?? []).map((child) => (
+                        <PanelItemButton key={child.key} item={child} currentUrl={currentUrl} />
+                    ))}
+                </div>
+            ) : null}
+        </SidebarMenuItem>
     );
 }

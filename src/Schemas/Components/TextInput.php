@@ -50,6 +50,18 @@ class TextInput extends Component
 
     protected ?string $copyMessage = null;
 
+    protected ?string $autocomplete = null;
+
+    /**
+     * Set the HTML autocomplete attribute for the input.
+     */
+    public function autocomplete(string $value): static
+    {
+        $this->autocomplete = $value;
+
+        return $this;
+    }
+
     /**
      * A client-side arithmetic expression (slice C3) whose result this field
      * displays and submits — the honest counterpart to Filament's reactive

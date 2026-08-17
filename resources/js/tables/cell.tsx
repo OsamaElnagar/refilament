@@ -1,30 +1,9 @@
-import {
-    Check,
-    CircleCheck,
-    CircleX,
-    Clock,
-    Eye,
-    EyeOff,
-    Globe,
-    Link2,
-    Lock,
-    Mail,
-    Pencil,
-    Phone,
-    Pin,
-    Star,
-    Tag,
-    Trash2,
-    TriangleAlert,
-    User,
-    Users,
-    X,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-
+import { useState } from 'react';
+import { Check } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Icon } from '@/components/icon';
 import { cn } from '@/lib/utils';
-import type { TableCellDisplay } from '@/tables/types';
+import type { TableCellDisplay, TableCellPresentation } from '@/tables/types';
 
 /** Tailwind text classes per color, over the default cell foreground. */
 const CELL_COLORS = {
@@ -47,35 +26,25 @@ const BADGE_COLORS = {
     info: 'border-sky-600/30 bg-sky-600/10 text-sky-700 dark:text-sky-400',
 } as const;
 
-/**
- * A small lookup of the icon keys we support in cells. The server resolves
- * the icon name per record; the renderer maps well-known keys to lucide
- * icons and drops unknown ones gracefully.
- */
-const ICONS: Record<string, LucideIcon> = {
-    check: Check,
-    'check-circle': CircleCheck,
-    x: X,
-    'x-circle': CircleX,
-    globe: Globe,
-    mail: Mail,
-    phone: Phone,
-    user: User,
-    users: Users,
-    link: Link2,
-    star: Star,
-    clock: Clock,
-    lock: Lock,
-    pencil: Pencil,
-    trash: Trash2,
-    eye: Eye,
-    'eye-off': EyeOff,
-    pin: Pin,
-    alert: TriangleAlert,
-    tag: Tag,
+/** Tailwind text-align per serialized Alignment enum value. */
+const ALIGNMENT_CLASSES: Record<string, string> = {
+    start: 'text-start',
+    left: 'text-left',
+    center: 'text-center',
+    end: 'text-end',
+    right: 'text-right',
+    justify: 'text-justify',
 };
 
-export { ICONS };
+/** Tailwind icon size per serialized IconSize enum value. */
+const ICON_SIZE_CLASSES: Record<string, string> = {
+    xs: 'size-3',
+    sm: 'size-3.5',
+    md: 'size-4',
+    lg: 'size-5',
+    xl: 'size-6',
+    '2xl': 'size-8',
+};
 
 /**
  * Normalize a raw cell to a structured display (Slice 2.1). Plain columns
@@ -102,23 +71,55 @@ export function cellValue(value: unknown): string | number | null {
 interface CellProps {
     value: unknown;
     placeholder?: string;
+    /** Column presentation options, serialized on the definition. */
+    presentation?: TableCellPresentation;
 }
 
 /**
  * Render one table cell. Plain columns render the bare value (or the column's
  * placeholder for empties); display columns render a Badge (with its per-record
  * color), an icon beside the value, and/or a link — all resolved server-side.
+ * Column-level presentation (alignment, weight, font family, line-clamp,
+ * tooltip, icon size/position, extra attributes) is applied from the
+ * definition.
  */
-export function Cell({ value, placeholder }: CellProps) {
+export function Cell({ value, placeholder, presentation }: CellProps) {
     const display = toCellDisplay(value);
     const empty = display.value === null || display.value === undefined || display.value === '';
 
+    const align = presentation?.alignment ? (ALIGNMENT_CLASSES[presentation.alignment] ?? '') : '';
+    const weight = presentation?.weight ? `font-${presentation.weight}` : '';
+    const family = presentation?.fontFamily ? `font-${presentation.fontFamily}` : '';
+    const clamp = presentation?.lineClamp ? `line-clamp-${presentation.lineClamp}` : '';
+    const iconSize = presentation?.iconSize ? (ICON_SIZE_CLASSES[presentation.iconSize] ?? 'size-3.5') : 'size-3.5';
+    const iconAfter = presentation?.iconPosition === 'after';
+    const cellAttrs = { title: presentation?.tooltip, ...presentation?.extraAttributes };
+
+    // Specialized column kinds render their own primitives (badge list, image
+    // stack, color swatches) instead of the scalar value. Only branch when the
+    // cell actually carries the relevant array — a blank state falls through to
+    // the normal placeholder rendering below.
+    if (presentation?.kind === 'tags' && (display.tags?.length ?? 0) > 0) {
+        return <TagsCell display={display} {...cellAttrs} />;
+    }
+
+    if (presentation?.kind === 'image' && (display.images?.length ?? 0) > 0) {
+        return <ImageCell display={display} presentation={presentation} {...cellAttrs} />;
+    }
+
+    if (presentation?.kind === 'color' && (display.colors?.length ?? 0) > 0) {
+        return <ColorCell display={display} copyable={presentation.copyable === true} {...cellAttrs} />;
+    }
+
     const content = empty ? (
-        <span className="text-muted-foreground/60">{placeholder ?? '—'}</span>
+        <span className={cn('text-muted-foreground/60', align)} {...cellAttrs}>
+            {placeholder ?? '—'}
+        </span>
     ) : (
-        <span className="inline-flex items-center gap-1.5">
-            {display.icon ? <CellIcon name={display.icon} color={display.iconColor} /> : null}
+        <span className={cn('inline-flex items-center gap-1.5', align, weight, family, clamp)} {...cellAttrs}>
+            {display.icon && !iconAfter ? <CellIcon name={display.icon} color={display.iconColor} size={iconSize} /> : null}
             <span>{String(display.value)}</span>
+            {display.icon && iconAfter ? <CellIcon name={display.icon} color={display.iconColor} size={iconSize} /> : null}
         </span>
     );
 
@@ -139,7 +140,7 @@ export function Cell({ value, placeholder }: CellProps) {
     if (!empty && display.badge) {
         const color = (display.color ?? 'secondary') as keyof typeof BADGE_COLORS;
         const icon = display.icon ? (
-            <CellIcon name={display.icon} color={display.iconColor} />
+            <CellIcon name={display.icon} color={display.iconColor} size={iconSize} />
         ) : null;
 
         return (
@@ -161,20 +162,115 @@ export function Cell({ value, placeholder }: CellProps) {
     return wrapped;
 }
 
-function CellIcon({ name, color }: { name: string; color?: string }) {
-    const Icon = ICONS[name];
-
-    if (!Icon) {
-        return null;
-    }
-
+function CellIcon({ name, color, size = 'size-3.5' }: { name: string; color?: string; size?: string }) {
     return (
         <Icon
+            name={name}
             className={cn(
-                'size-3.5 shrink-0',
+                size,
+                'shrink-0',
                 color ? (CELL_COLORS[color as keyof typeof CELL_COLORS] ?? CELL_COLORS.secondary) : 'text-muted-foreground',
             )}
-            aria-hidden="true"
         />
+    );
+}
+
+/** Tags column — the cell state as a small badge list, with an overflow count. */
+function TagsCell({ display, ...attrs }: { display: TableCellDisplay } & Record<string, unknown>) {
+    const tags = display.tags ?? [];
+
+    return (
+        <span className="inline-flex flex-wrap items-center gap-1" {...attrs}>
+            {tags.map((tag, index) => (
+                <Badge key={index} variant="outline" className="py-0 font-normal">
+                    {tag}
+                </Badge>
+            ))}
+            {typeof display.remaining === 'number' && display.remaining > 0 ? (
+                <span className="text-xs text-muted-foreground">+{display.remaining}</span>
+            ) : null}
+        </span>
+    );
+}
+
+/** Image column — one or more thumbnails, optionally circular/square/stacked. */
+function ImageCell({
+    display,
+    presentation,
+    ...attrs
+}: { display: TableCellDisplay; presentation: TableCellPresentation } & Record<string, unknown>) {
+    const images = display.images ?? [];
+    const stacked = presentation.stacked === true;
+    const numericSize = typeof presentation.size === 'number' ? presentation.size : Number(presentation.size ?? NaN);
+    const size = Number.isFinite(numericSize) ? numericSize : stacked ? 32 : 40;
+    const ring = presentation.ring ?? 2;
+    const overlap = presentation.overlap ?? 2;
+
+    return (
+        <span className="inline-flex items-center" {...attrs}>
+            {images.map((src, index) => (
+                <img
+                    key={index}
+                    src={src}
+                    alt=""
+                    loading="lazy"
+                    className={cn(
+                        'shrink-0 object-cover',
+                        presentation.circular ? 'rounded-full' : 'rounded',
+                        stacked ? 'ring-2 ring-background' : '',
+                    )}
+                    style={{
+                        width: size,
+                        height: size,
+                        ...(stacked && index > 0 ? { marginLeft: -overlap, boxShadow: `0 0 0 ${ring}px hsl(var(--background))` } : {}),
+                    }}
+                />
+            ))}
+            {typeof display.remaining === 'number' && display.remaining > 0 ? (
+                <span className="ml-1 text-xs text-muted-foreground">+{display.remaining}</span>
+            ) : null}
+        </span>
+    );
+}
+
+/** Color column — color swatches; copyable swatches copy their value on click. */
+function ColorCell({
+    display,
+    copyable,
+    ...attrs
+}: { display: TableCellDisplay; copyable: boolean } & Record<string, unknown>) {
+    const colors = display.colors ?? [];
+    const [copied, setCopied] = useState<number | null>(null);
+
+    return (
+        <span className="inline-flex items-center gap-1" {...attrs}>
+            {colors.map((color, index) => (
+                <button
+                    key={index}
+                    type="button"
+                    disabled={!copyable}
+                    aria-label={color}
+                    title={copyable ? `Copy ${color}` : color}
+                    onClick={() => {
+                        if (!copyable) {
+                            return;
+                        }
+
+                        void navigator.clipboard?.writeText(color);
+                        setCopied(index);
+                        window.setTimeout(() => setCopied(null), 1200);
+                    }}
+                    className={cn(
+                        'relative size-5 rounded-sm',
+                        copyable ? 'cursor-pointer' : 'cursor-default',
+                    )}
+                    style={{ backgroundColor: color }}
+                >
+                    {copied === index ? (
+                        <Check className="absolute inset-0 m-auto size-3 text-white mix-blend-difference" />
+                    ) : null}
+                </button>
+            ))}
+        </span>
     );
 }

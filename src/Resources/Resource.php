@@ -12,6 +12,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use LogicException;
+use Refilament\Refilament\Actions\Action;
+use Refilament\Refilament\Clusters;
 use Refilament\Refilament\GlobalSearch\GlobalSearchResult;
 use Refilament\Refilament\Refilament;
 use Refilament\Refilament\Resources\Pages\CreateRecord;
@@ -21,7 +23,6 @@ use Refilament\Refilament\Resources\Pages\PageRegistration;
 use Refilament\Refilament\Resources\Pages\ViewRecord;
 use Refilament\Refilament\Resources\RelationManagers\RelationManager;
 use Refilament\Refilament\Schemas\Schema;
-use Refilament\Refilament\Tables\Action;
 use Refilament\Refilament\Tables\Table;
 use UnitEnum;
 
@@ -56,6 +57,23 @@ abstract class Resource
      * resource's form by (derives from the class name otherwise).
      */
     protected static ?string $formId = null;
+
+    /**
+     * The cluster this resource belongs to (the page-clusters slice) —
+     * declaring it groups the resource under the cluster's sidebar entry
+     * (sub-navigation) and adds the cluster crumb to its pages' breadcrumbs.
+     * Mirrors Filament's `BelongsToCluster` trait.
+     *
+     * @var class-string<Clusters\Cluster>|null
+     */
+    protected static ?string $cluster = null;
+
+    /**
+     * The crumb shown for this resource in page breadcrumbs (slice 1.11) —
+     * defaults to the plural model label ("Posts"). Setting it customizes the
+     * crumb every resource page links back to the list from.
+     */
+    protected static ?string $breadcrumb = null;
 
     protected static bool $isDiscovered = true;
 
@@ -129,6 +147,24 @@ abstract class Resource
      * The id the typed submit endpoint addresses this resource's form by
      * (PostResource → "post-form", or the `$formId` override).
      */
+    /**
+     * The cluster this resource belongs to (the page-clusters slice), if any.
+     *
+     * @return class-string<Clusters\Cluster>|null
+     */
+    public static function getCluster(): ?string
+    {
+        return static::$cluster;
+    }
+
+    /**
+     * Whether this resource belongs to a cluster.
+     */
+    public static function isClustered(): bool
+    {
+        return static::getCluster() !== null;
+    }
+
     public static function getFormId(): string
     {
         return static::$formId ?? Str::kebab(Str::beforeLast(class_basename(static::class), 'Resource')).'-form';
@@ -234,6 +270,69 @@ abstract class Resource
     }
 
     /**
+     * Whether the resource declares a page under the given name (slice 1.10
+     * — docs/ROADMAP.md "1.10 Page header actions"). The lookup the default
+     * CreateAction uses to decide between navigating to the create page and
+     * falling back to a modal, mirroring Filament's `Resource::hasPage()`.
+     */
+    public static function hasPage(string $page): bool
+    {
+        return isset(static::getPages()[$page]);
+    }
+
+    /**
+     * The URL of one of this resource's record pages for a record (record
+     * navigation slice) — e.g. the view page at /{resource}/{record} or the
+     * edit page at /{resource}/{record}/edit. The route is named after the
+     * page slot (`refilament.resource.view`), registered at boot from
+     * getPages(). Callers guard page existence via getRecordUrl() first.
+     */
+    public static function getPageUrl(string $page, mixed $record): string
+    {
+        return route("refilament.resource.{$page}", [
+            'resource' => static::getTableId(),
+            'record' => $record->getKey(),
+        ]);
+    }
+
+    /**
+     * Resolve a per-record navigation URL for this resource (record
+     * navigation slice) — the page name the table's URL resolver asks for:
+     *
+     *   - 'default' — the row's click target: the view page when the current
+     *     user can view the record, else the edit page when they can edit.
+     *   - 'view' / 'edit' — the page URL for the record, when the resource
+     *     declares the page and the user passes the ability gate.
+     *
+     * Returns null when no page applies (no view page, or the user may not
+     * act on the record) — the row is then not clickable and the matching
+     * record action (ViewAction) doesn't render.
+     */
+    public static function getRecordUrl(string $page, mixed $record): ?string
+    {
+        if ($page === 'default') {
+            return static::getRecordUrl('view', $record) ?? static::getRecordUrl('edit', $record);
+        }
+
+        $ability = match ($page) {
+            'view' => 'view',
+            'edit' => 'update',
+            default => null,
+        };
+
+        if (
+            $ability === null
+            || ! static::hasPage($page)
+            || ! app('router')->has("refilament.resource.{$page}")
+            || ! static::can($ability, $record)
+        ) {
+            return null;
+        }
+
+        return static::getPageUrl($page, $record);
+    }
+
+    /**
      * The panel-sidebar label (slice 1.9) — the `$navigationLabel` override,
      * else the plural, headlined model name ("User" → "Users").
      */
@@ -270,6 +369,53 @@ abstract class Resource
     public static function getPluralModelLabel(): string
     {
         return Str::headline(Str::plural(class_basename(static::getModel())));
+    }
+
+    /**
+     * The singular, headlined label for this resource's model ("User" → "User")
+     * — the fallback for a record title when no record title attribute is set
+     * (slice 1.11 — docs/ROADMAP.md "1.11 Breadcrumbs"). Mirrors Filament's
+     * `getModelLabel()`.
+     */
+    public static function getModelLabel(): string
+    {
+        return Str::headline(class_basename(static::getModel()));
+    }
+
+    /**
+     * The crumb shown for this resource in page breadcrumbs (slice 1.11) —
+     * the `$breadcrumb` override, else the plural, headlined model label
+     * ("Posts"). Mirrors Filament's `Resource::getBreadcrumb()`.
+     */
+    public static function getBreadcrumb(): string
+    {
+        return static::$breadcrumb ?? static::getPluralModelLabel();
+    }
+
+    /**
+     * Whether this resource's records carry a display title for breadcrumbs
+     * and other record-naming surfaces (slice 1.11) — true when a record
+     * title attribute is set. Mirrors Filament's `hasRecordTitle()`.
+     */
+    public static function hasRecordTitle(): bool
+    {
+        return static::getRecordTitleAttribute() !== null;
+    }
+
+    /**
+     * The display title for a record (slice 1.11) — its record title
+     * attribute's value, else the singular model label. Mirrors Filament's
+     * `getRecordTitle()`.
+     */
+    public static function getRecordTitle(?Model $record): string
+    {
+        $attribute = static::getRecordTitleAttribute();
+
+        if ($record !== null && $attribute !== null && filled($record->getAttribute($attribute))) {
+            return (string) $record->getAttribute($attribute);
+        }
+
+        return static::getModelLabel();
     }
 
     /**
