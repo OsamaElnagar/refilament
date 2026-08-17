@@ -147,7 +147,7 @@ class MakeResourceCommand extends Command
         }
 
         $fieldImports = $this->renderFieldImports();
-        $toggleColumnImport = isset($this->usedTableColumns['ToggleColumn']) ? "\nuse Refilament\\Refilament\\Tables\\ToggleColumn;" : '';
+        $toggleColumnImport = isset($this->usedTableColumns['ToggleColumn']) ? "\nuse Refilament\\Refilament\\Tables\\Columns\\ToggleColumn;" : '';
 
         // The stubs embed the bodies one level past the `->columns([` /
         // `->components([` chain lines (12 spaces + 4) — indent every line

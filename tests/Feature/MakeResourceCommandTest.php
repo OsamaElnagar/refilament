@@ -202,7 +202,7 @@ it('maps boolean and text columns to toggles, textareas and toggle columns', fun
     $form = file_get_contents($path.'/Comments/Schemas/CommentForm.php');
 
     expect($table)->toContain("ToggleColumn::make('is_visible')");
-    expect($table)->toContain('use Refilament\Refilament\Tables\ToggleColumn;');
+    expect($table)->toContain('use Refilament\Refilament\Tables\Columns\ToggleColumn;');
     expect($form)->toContain("Toggle::make('is_visible')");
     expect($form)->toContain("Textarea::make('content')");
 
