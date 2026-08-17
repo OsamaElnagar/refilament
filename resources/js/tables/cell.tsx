@@ -1,6 +1,9 @@
-import { useState } from 'react';
-import { Check } from 'lucide-react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { Check, ChevronDown, ChevronUp, Copy, Maximize2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Icon } from '@/components/icon';
 import { cn } from '@/lib/utils';
 import type { TableCellDisplay, TableCellPresentation } from '@/tables/types';
@@ -111,6 +114,24 @@ export function Cell({ value, placeholder, presentation }: CellProps) {
         return <ColorCell display={display} copyable={presentation.copyable === true} {...cellAttrs} />;
     }
 
+    // Rich-text cells — a clamped/expandable/previewable/copyable/wrapped text
+    // value. These render through TextValueCell, which keeps the full value in
+    // the payload and reveals it on hover (tooltip), inline (Show more), in a
+    // dialog (preview), or to the clipboard (copy).
+    const richText =
+        !empty &&
+        !display.badge &&
+        (presentation?.lineClamp != null ||
+            presentation?.expandable === true ||
+            presentation?.previewable === true ||
+            presentation?.copyable === true ||
+            presentation?.wrap === true ||
+            presentation?.tooltip != null);
+
+    if (richText) {
+        return <TextValueCell display={display} presentation={presentation} {...cellAttrs} />;
+    }
+
     const content = empty ? (
         <span className={cn('text-muted-foreground/60', align)} {...cellAttrs}>
             {placeholder ?? '—'}
@@ -160,6 +181,193 @@ export function Cell({ value, placeholder, presentation }: CellProps) {
     }
 
     return wrapped;
+}
+
+/**
+ * Rich-text cell — a clamped/expandable/previewable/copyable/wrapped text
+ * value. The full value is already in the payload (lineClamp/wrap preserve
+ * it), so every reveal path is pure client state:
+ *   - a clamped cell shows its full value on hover (styled tooltip);
+ *   - an `expandable` cell reveals the rest inline with Show more / Show less;
+ *   - a `previewable` cell opens the value in a dialog;
+ *   - a `copyable` cell copies it to the clipboard.
+ * Buttons stop propagation so they never trigger the row's own click target.
+ */
+function TextValueCell({
+    display,
+    presentation,
+}: {
+    display: TableCellDisplay;
+    presentation?: TableCellPresentation;
+}) {
+    const text = String(display.value ?? '');
+    const align = presentation?.alignment ? (ALIGNMENT_CLASSES[presentation.alignment] ?? '') : '';
+    const weight = presentation?.weight ? `font-${presentation.weight}` : '';
+    const family = presentation?.fontFamily ? `font-${presentation.fontFamily}` : '';
+    const iconSize = presentation?.iconSize ? (ICON_SIZE_CLASSES[presentation.iconSize] ?? 'size-3.5') : 'size-3.5';
+    const iconAfter = presentation?.iconPosition === 'after';
+    const expandable = presentation?.expandable === true;
+    const clampCount = expandable
+        ? presentation?.expandableLines ?? presentation?.lineClamp ?? 2
+        : presentation?.lineClamp ?? undefined;
+    const wrap = presentation?.wrap === true || clampCount !== undefined;
+
+    const [expanded, setExpanded] = useState(false);
+    const [overflows, setOverflows] = useState(false);
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const [copied, setCopied] = useState(false);
+    const textRef = useRef<HTMLSpanElement>(null);
+
+    // Only show the Show more/less toggle when the clamped text actually
+    // overflows its box — measured against the rendered element.
+    useLayoutEffect(() => {
+        if (clampCount === undefined) {
+            setOverflows(false);
+
+            return;
+        }
+
+        const el = textRef.current;
+
+        if (!el) {
+            return;
+        }
+
+        const check = (): void => setOverflows(el.scrollHeight > el.clientHeight + 1);
+        check();
+        window.addEventListener('resize', check);
+
+        return () => window.removeEventListener('resize', check);
+    }, [clampCount, text, expanded]);
+
+    const isClamped = clampCount !== undefined && !expanded;
+    const tooltip = presentation?.tooltip ?? (isClamped ? text : undefined);
+
+    const content = (
+        <span className={cn('inline-flex items-center gap-1.5', align, weight, family)}>
+            {display.icon && !iconAfter ? (
+                <CellIcon name={display.icon} color={display.iconColor} size={iconSize} />
+            ) : null}
+            <span
+                ref={textRef}
+                className={cn(wrap && 'whitespace-normal break-words', isClamped && 'overflow-hidden')}
+                style={
+                    isClamped
+                        ? { display: '-webkit-box', WebkitLineClamp: clampCount, WebkitBoxOrient: 'vertical' }
+                        : undefined
+                }
+            >
+                {text}
+            </span>
+            {display.icon && iconAfter ? <CellIcon name={display.icon} color={display.iconColor} size={iconSize} /> : null}
+        </span>
+    );
+
+    const copyButton =
+        presentation?.copyable === true && text ? (
+            <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-6 rounded-sm text-muted-foreground hover:text-foreground"
+                aria-label="Copy value"
+                onClick={(event) => {
+                    event.stopPropagation();
+                    void navigator.clipboard?.writeText(text);
+                    setCopied(true);
+                    window.setTimeout(() => setCopied(false), 1200);
+                }}
+            >
+                {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
+            </Button>
+        ) : null;
+
+    const previewButton =
+        presentation?.previewable === true && text ? (
+            <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-6 rounded-sm text-muted-foreground hover:text-foreground"
+                aria-label="Preview value"
+                onClick={(event) => {
+                    event.stopPropagation();
+                    setPreviewOpen(true);
+                }}
+            >
+                <Maximize2 className="size-3.5" />
+            </Button>
+        ) : null;
+
+    const actions = copyButton || previewButton ? (
+        <span className="ml-0.5 inline-flex items-center gap-0.5">
+            {previewButton}
+            {copyButton}
+        </span>
+    ) : null;
+
+    const textNode = display.url ? (
+        <a
+            href={display.url}
+            target={display.openUrlInNewTab ? '_blank' : undefined}
+            rel={display.openUrlInNewTab ? 'noreferrer' : undefined}
+            className="text-indigo-600 transition hover:text-indigo-800 hover:underline dark:text-indigo-400 dark:hover:text-indigo-300"
+        >
+            {content}
+        </a>
+    ) : (
+        content
+    );
+
+    const valueWithTooltip = tooltip ? (
+        <Tooltip>
+            <TooltipTrigger render={<span />}>{textNode}</TooltipTrigger>
+            <TooltipContent className="max-w-sm">
+                <span className="line-clamp-6 whitespace-pre-wrap break-words">{tooltip}</span>
+            </TooltipContent>
+        </Tooltip>
+    ) : (
+        textNode
+    );
+
+    const expandToggle =
+        expandable && overflows ? (
+            <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="-ml-1 h-6 px-1.5 text-xs text-primary hover:text-primary"
+                onClick={(event) => {
+                    event.stopPropagation();
+                    setExpanded((value) => !value);
+                }}
+            >
+                {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+                {expanded ? 'Show less' : 'Show more'}
+            </Button>
+        ) : null;
+
+    return (
+        <>
+            <span className="inline-flex items-start gap-1.5">
+                {valueWithTooltip}
+                {actions}
+            </span>
+            {expandToggle}
+            {previewOpen ? (
+                <Dialog open onOpenChange={(open) => !open && setPreviewOpen(false)}>
+                    <DialogContent className="sm:max-w-2xl">
+                        <DialogHeader>
+                            <DialogTitle>Preview</DialogTitle>
+                        </DialogHeader>
+                        <div className="max-h-[60vh] overflow-y-auto whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
+                            {text}
+                        </div>
+                    </DialogContent>
+                </Dialog>
+            ) : null}
+        </>
+    );
 }
 
 function CellIcon({ name, color, size = 'size-3.5' }: { name: string; color?: string; size?: string }) {

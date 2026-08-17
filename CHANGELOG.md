@@ -1,6 +1,18 @@
 # Release Notes
 
-## [Unreleased](https://github.com/osamaelnagar/refilament/compare/v0.2.2...main)
+## [Unreleased](https://github.com/osamaelnagar/refilament/compare/v0.2.3...main)
+
+## [v0.2.3](https://github.com/osamaelnagar/refilament/compare/v0.2.2...v0.2.3) - 2026-08-17
+
+### Added
+
+- **Long-text columns no longer stretch the table** — `refilament:make-resource` now emits `->lineClamp(2)` on `text`/`longtext` columns, so generated tables clamp the body to a couple of lines instead of rendering it full-width. The full value is preserved in the payload (clamping is client-side), and the cell shows it on hover.
+- **Text-cell reveal options (`Column`)** — four client-side modifiers that keep the full value in the payload and reveal it without a round trip:
+  - `->expandable(int $lines = 2)` — clamp to N lines and reveal the rest in place with an inline "Show more / Show less" toggle (only shown when the text actually overflows).
+  - `->previewOnClick()` — a small expand icon on the cell opens the full value in a dialog.
+  - `->copyable()` — a copy-to-clipboard icon on the cell.
+  - `->wrap()` — let the value wrap inside the cell instead of forcing the column wider (implicit when clamped/expandable).
+  - Any `->tooltip()` now renders as a styled shadcn tooltip; a clamped cell without an explicit tooltip shows its full value on hover automatically.
 
 ## [v0.2.2](https://github.com/osamaelnagar/refilament/compare/v0.2.1...v0.2.2) - 2026-08-17
 

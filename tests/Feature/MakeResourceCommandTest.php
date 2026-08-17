@@ -206,6 +206,10 @@ it('maps boolean and text columns to toggles, textareas and toggle columns', fun
     expect($form)->toContain("Toggle::make('is_visible')");
     expect($form)->toContain("Textarea::make('content')");
 
+    // Long-text columns clamp to a couple of lines so the table never
+    // stretches horizontally to fit the full body.
+    expect($table)->toContain("Column::make('content')->label('Content')->lineClamp(2),");
+
     // Comment does not soft-delete — no trashed filter is emitted.
     expect($table)->not->toContain('TrashedFilter');
 });

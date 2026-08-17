@@ -122,6 +122,21 @@ class Column
     /** @var array<int, Summarizer> */
     protected array $summarizers = [];
 
+    /** Clamp to a few lines with an inline "Show more / Show less" toggle. */
+    protected bool $isExpandable = false;
+
+    /** The line count a collapsed expandable column clamps to. */
+    protected int|Closure|null $expandableLines = null;
+
+    /** Open the full value in a modal when the cell's expand icon is clicked. */
+    protected bool $isPreviewable = false;
+
+    /** Allow the value to wrap within the cell instead of forcing the column wide. */
+    protected bool $canWrap = false;
+
+    /** Offer a copy-to-clipboard icon on the cell. */
+    protected bool $isCopyable = false;
+
     final public function __construct(protected ?string $name = null)
     {
         $this->configure();
@@ -320,6 +335,78 @@ class Column
 
             return Str::limit((string) $state, $length, $end);
         });
+    }
+
+    /**
+     * Clamp the cell to a few lines and reveal the rest in place with an
+     * inline "Show more / Show less" toggle (client-side state). Pairs with
+     * lineClamp() — when both are set the expandable line count wins.
+     */
+    public function expandable(int|Closure|null $lines = 2): static
+    {
+        $this->isExpandable = true;
+        $this->expandableLines = $lines;
+
+        return $this;
+    }
+
+    public function isExpandable(): bool
+    {
+        return $this->isExpandable;
+    }
+
+    public function getExpandableLines(): ?int
+    {
+        return $this->evaluate($this->expandableLines);
+    }
+
+    /**
+     * Render a small expand icon on the cell that opens the full value in a
+     * dialog. The full value is already shipped in the payload (lineClamp and
+     * wrap preserve it), so the dialog is pure client state — no round trip.
+     */
+    public function previewOnClick(bool $condition = true): static
+    {
+        $this->isPreviewable = $condition;
+
+        return $this;
+    }
+
+    public function isPreviewable(): bool
+    {
+        return $this->isPreviewable;
+    }
+
+    /**
+     * Allow the value to wrap within the cell rather than forcing the column
+     * wider. On by default for clamped text; set explicitly for plain columns.
+     */
+    public function wrap(bool $condition = true): static
+    {
+        $this->canWrap = $condition;
+
+        return $this;
+    }
+
+    public function canWrap(): bool
+    {
+        return $this->canWrap;
+    }
+
+    /**
+     * Show a copy-to-clipboard icon on the cell. The value copied is the raw
+     * display state (the same scalar the cell renders).
+     */
+    public function copyable(bool $condition = true): static
+    {
+        $this->isCopyable = $condition;
+
+        return $this;
+    }
+
+    public function isCopyable(): bool
+    {
+        return $this->isCopyable;
     }
 
     /**
@@ -724,6 +811,28 @@ class Column
 
         if ($lineClamp !== null) {
             $payload['lineClamp'] = $lineClamp;
+        }
+
+        if ($this->isExpandable()) {
+            $payload['expandable'] = true;
+
+            $expandableLines = $this->getExpandableLines();
+
+            if ($expandableLines !== null) {
+                $payload['expandableLines'] = $expandableLines;
+            }
+        }
+
+        if ($this->isPreviewable()) {
+            $payload['previewable'] = true;
+        }
+
+        if ($this->canWrap()) {
+            $payload['wrap'] = true;
+        }
+
+        if ($this->isCopyable()) {
+            $payload['copyable'] = true;
         }
 
         if ($this->hasIconPosition()) {

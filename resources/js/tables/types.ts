@@ -34,6 +34,15 @@ export interface TableCellPresentation {
     defaultImageUrl?: string;
     /** Color column: swatches copy their value on click. */
     copyable?: boolean;
+    /** Text column: clamp to N lines with an inline "Show more / Show less"
+     * toggle (client-side state). */
+    expandable?: boolean;
+    /** Text column: the line count a collapsed expandable cell clamps to. */
+    expandableLines?: number;
+    /** Text column: render an expand icon that opens the full value in a dialog. */
+    previewable?: boolean;
+    /** Text column: allow the value to wrap within the cell. */
+    wrap?: boolean;
     /** Inline-editable column (slice: editable columns): the client renders an
      * inline control (checkbox/switch/select/text input) that writes this
      * column through the record-column update endpoint. */

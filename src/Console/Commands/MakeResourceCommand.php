@@ -330,7 +330,11 @@ class MakeResourceCommand extends Command
             }
 
             if ($this->isTextType($type)) {
-                $tableColumns[] = "Column::make('{$name}')->label('{$label}'),";
+                // Long text clamps to a couple of lines so it never stretches
+                // the table; the full value is preserved client-side and the
+                // cell shows it on hover. Add ->expandable() / ->previewOnClick()
+                // for an inline or modal reveal.
+                $tableColumns[] = "Column::make('{$name}')->label('{$label}')->lineClamp(2),";
                 $formFields[] = $this->trackField('Textarea', $name, $label, $nullable).',';
                 $infolistEntries[] = "TextEntry::make('{$name}')->label('{$label}'),";
 

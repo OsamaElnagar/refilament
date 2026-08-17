@@ -302,3 +302,42 @@ it('evaluates a closure placeholder at serialization', function () {
 it('omits the placeholder key when not configured', function () {
     expect(Column::make('title')->toArray())->not()->toHaveKey('placeholder');
 });
+
+it('emits the expandable flags on the definition', function () {
+    $payload = Column::make('content')->expandable()->toArray();
+
+    expect($payload['expandable'])->toBeTrue();
+    expect($payload['expandableLines'])->toBe(2);
+});
+
+it('emits a custom expandable line count', function () {
+    $payload = Column::make('content')->expandable(5)->toArray();
+
+    expect($payload['expandable'])->toBeTrue();
+    expect($payload['expandableLines'])->toBe(5);
+});
+
+it('omits expandableLines when the column is not expandable', function () {
+    expect(Column::make('content')->toArray())->not()->toHaveKey('expandable');
+    expect(Column::make('content')->toArray())->not()->toHaveKey('expandableLines');
+});
+
+it('emits previewable, wrap and copyable flags', function () {
+    $payload = Column::make('content')
+        ->previewOnClick()
+        ->wrap()
+        ->copyable()
+        ->toArray();
+
+    expect($payload['previewable'])->toBeTrue();
+    expect($payload['wrap'])->toBeTrue();
+    expect($payload['copyable'])->toBeTrue();
+});
+
+it('does not emit rich-text flags when unset', function () {
+    $payload = Column::make('content')->toArray();
+
+    expect($payload)->not()->toHaveKey('previewable');
+    expect($payload)->not()->toHaveKey('wrap');
+    expect($payload)->not()->toHaveKey('copyable');
+});
