@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace {{ namespace }};
 
 use {{ resourceFqn }};
-use Refilament\Refilament\Resources\Pages\{{ extends }};
+{{ actionImports }}use Refilament\Refilament\Resources\Pages\{{ extends }};
 
 class {{ class }} extends {{ extends }}
 {
@@ -15,4 +15,5 @@ class {{ class }} extends {{ extends }}
      * @var class-string<{{ resourceShort }}>|null
      */
     protected static ?string $resource = {{ resourceShort }}::class;
+{{ headerActions }}
 }

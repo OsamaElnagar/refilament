@@ -227,3 +227,43 @@ it('resolves the model through --model-namespace when --model is omitted', funct
 
     expect($resource)->toContain('use Workbench\App\Models\Post;');
 });
+
+it('generates record actions and record-page header actions by default', function () {
+    $path = sys_get_temp_dir().'/refilament-actions-'.Str::random(6);
+    $namespace = 'Refilament\\Refilament\\Tests\\Generated';
+
+    config()->set('refilament.resources.path', $path);
+    config()->set('refilament.resources.namespace', $namespace);
+
+    $this->artisan('refilament:make-resource', [
+        'name' => 'Post',
+        '--model' => Post::class,
+        '--generate' => true,
+    ])->assertSuccessful();
+
+    // The table ships per-row edit + delete record actions, with the imports
+    // alphabetized ahead of the Table imports (pint-clean).
+    $table = file_get_contents($path.'/Posts/Tables/PostsTable.php');
+
+    expect($table)->toContain('use Refilament\Refilament\Actions\DeleteAction;');
+    expect($table)->toContain('use Refilament\Refilament\Actions\EditAction;');
+    expect($table)->toContain('->recordActions([');
+    expect($table)->toContain('EditAction::make(),');
+    expect($table)->toContain('DeleteAction::make(),');
+
+    // The edit page carries view + delete header actions.
+    $edit = file_get_contents($path.'/Posts/Pages/EditPost.php');
+
+    expect($edit)->toContain('use Refilament\Refilament\Actions\ViewAction;');
+    expect($edit)->toContain('getHeaderActions(string $resource)');
+    expect($edit)->toContain('ViewAction::make(),');
+    expect($edit)->toContain('DeleteAction::make()');
+
+    // The view page carries edit + delete header actions.
+    $view = file_get_contents($path.'/Posts/Pages/ViewPost.php');
+
+    expect($view)->toContain('use Refilament\Refilament\Actions\EditAction;');
+    expect($view)->toContain('getHeaderActions(string $resource)');
+    expect($view)->toContain('EditAction::make(),');
+    expect($view)->toContain('DeleteAction::make()');
+});

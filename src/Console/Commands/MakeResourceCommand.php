@@ -208,11 +208,13 @@ class MakeResourceCommand extends Command
                 'View' => 'ViewRecord',
             ][$pageName];
 
+            [$actionImports, $headerActions] = self::pageHeaderActions($pageName);
+
             $filesystem->put(
                 $pageFiles[$pageName.$name.'.php'],
                 str_replace(
-                    [...array_keys($pageVariables), '{{ class }}', '{{ extends }}'],
-                    [...array_values($pageVariables), $pageName.$name, $extends],
+                    [...array_keys($pageVariables), '{{ class }}', '{{ extends }}', '{{ actionImports }}', '{{ headerActions }}'],
+                    [...array_values($pageVariables), $pageName.$name, $extends, $actionImports, $headerActions],
                     $stub,
                 ),
             );
@@ -236,6 +238,7 @@ class MakeResourceCommand extends Command
             [
                 '{{ namespace }}', '{{ class }}', '{{ tableId }}', '{{ body }}',
                 '{{ modelImport }}', '{{ modelShort }}', '{{ toggleColumnImport }}', '{{ filtersImport }}', '{{ filtersBody }}',
+                '{{ actionImports }}', '{{ recordActions }}',
             ],
             [
                 "{$baseNamespace}\\Tables", "{$plural}Table", $tableId, $tableBody,
@@ -243,6 +246,8 @@ class MakeResourceCommand extends Command
                 $toggleColumnImport,
                 $usesSoftDeletes ? "\nuse Refilament\\Refilament\\Tables\\TrashedFilter;" : '',
                 $usesSoftDeletes ? "\n            ->filters([TrashedFilter::make()])" : '',
+                self::tableActionImports(),
+                self::tableRecordActions(),
             ],
             $tableStub,
         ));
@@ -374,6 +379,57 @@ class MakeResourceCommand extends Command
     protected static function infolistPlaceholder(): string
     {
         return '// TODO: define entries — e.g.';
+    }
+
+    /**
+     * The `use` statements the generated table needs for its default per-row
+     * record actions, alphabetized ahead of the Table imports so the output
+     * stays pint-clean out of the box.
+     */
+    protected static function tableActionImports(): string
+    {
+        return "use Refilament\\Refilament\\Actions\\DeleteAction;\nuse Refilament\\Refilament\\Actions\\EditAction;\n";
+    }
+
+    /**
+     * The default per-row record actions on a generated table — edit and
+     * delete, mirroring Filament's generated resources.
+     */
+    protected static function tableRecordActions(): string
+    {
+        return "\n            ->recordActions([\n                EditAction::make(),\n                DeleteAction::make(),\n            ])";
+    }
+
+    /**
+     * The action imports and header-actions body for a generated page. Record
+     * pages ship the framework's built-in navigation actions by default: the
+     * edit page carries view + delete, the view page edit + delete. The list
+     * and create pages ship none (the list page stub declares its own
+     * CreateAction).
+     *
+     * @return array{0: string, 1: string} the import block and the header-actions body
+     */
+    protected static function pageHeaderActions(string $pageName): array
+    {
+        $specs = [
+            'Edit' => [['Action', 'DeleteAction', 'ViewAction'], "ViewAction::make(),\n            DeleteAction::make()"],
+            'View' => [['Action', 'DeleteAction', 'EditAction'], "EditAction::make(),\n            DeleteAction::make()"],
+        ];
+
+        if (! isset($specs[$pageName])) {
+            return ['', ''];
+        }
+
+        [$imports, $actions] = $specs[$pageName];
+
+        $importBlock = implode("\n", array_map(
+            static fn (string $name): string => "use Refilament\\Refilament\\Actions\\{$name};",
+            $imports,
+        ))."\n";
+
+        $headerActions = "\n    /**\n     * Header actions — the built-in navigation actions for this record page.\n     *\n     * @return array<int, Action>\n     */\n    protected static function getHeaderActions(string \$resource): array\n    {\n        return [\n            {$actions}\n        ];\n    }\n";
+
+        return [$importBlock, $headerActions];
     }
 
     /**

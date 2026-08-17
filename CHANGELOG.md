@@ -1,6 +1,18 @@
 # Release Notes
 
-## [Unreleased](https://github.com/osamaelnagar/refilament/compare/v0.2.0...main)
+## [Unreleased](https://github.com/osamaelnagar/refilament/compare/v0.2.2...main)
+
+## [v0.2.2](https://github.com/osamaelnagar/refilament/compare/v0.2.1...v0.2.2) - 2026-08-17
+
+### Added
+
+- **`refilament:make-resource` ships actions by default** — generated tables now carry per-row `recordActions([EditAction, DeleteAction])`, the generated edit page carries `ViewAction` + `DeleteAction` header actions, and the generated view page carries `EditAction` + `DeleteAction` header actions. The needed `use` statements are emitted alphabetized (pint-clean), and the list page keeps its default `CreateAction`.
+
+## [v0.2.1](https://github.com/osamaelnagar/refilament/compare/v0.2.0...v0.2.1) - 2026-08-17
+
+### Fixed
+
+- **`refilament:make-resource` generated tables with boolean columns failed to load** — the generator emitted `use Refilament\Refilament\Tables\ToggleColumn;`, but the class lives under `Refilament\Refilament\Tables\Columns\ToggleColumn`. The import (and the test that encoded the wrong namespace) now point at the real class, so generated `ToggleColumn` tables resolve at runtime.
 
 ## [v0.2.0](https://github.com/osamaelnagar/refilament/compare/v0.1.1-beta.2...v0.2.0) - 2026-08-17
 
